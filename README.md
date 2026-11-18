@@ -82,6 +82,9 @@ taps **Insert Coin** on the portal, and only one device may hold it at a time.
 
 ## Quick start (no hardware needed)
 
+Step-by-step instructions - appliance install, coin-acceptor wiring, config
+reference and troubleshooting - are in **[INSTALL.md](INSTALL.md)**.
+
 Works on Windows, macOS and Linux with the mock router and mock coin slot:
 
 ```powershell
@@ -245,10 +248,10 @@ database and are editable from *Settings* - no restart needed.
 .venv\Scripts\python.exe -m pytest
 ```
 
-46 tests cover the portal flow, CSRF, voucher lifecycle, coin ledger splitting,
-the kiosk checkout, session expiry/data caps/pause/extend, the nftables script
-builder and every admin page. They run on the mock drivers, so no hardware,
-root or Linux is required.
+53 tests cover the portal flow, CSRF, voucher lifecycle, coin ledger splitting,
+the coin flow (arming, exclusive lock, settlement), the kiosk checkout, session
+expiry/data caps/pause/extend, the nftables script builder and every admin page.
+They run on the mock drivers, so no hardware, root or Linux is required.
 
 ## Project layout
 

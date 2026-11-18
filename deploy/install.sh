@@ -92,11 +92,19 @@ install -d -m 0750 "$ETC_DIR"
 rsync -a --delete \
   --exclude '.git' --exclude '.venv' --exclude '__pycache__' \
   --exclude 'data' --exclude '.pytest_cache' --exclude 'tests' \
+  --exclude '.env' \
   "$REPO_DIR"/ "$APP_DIR"/
 
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/pip" install --quiet --upgrade pip
 "$APP_DIR/.venv/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
+
+# The coin slot counts pulses through gpiozero. Only install it where a GPIO
+# chip exists, so x86 boxes without one stay dependency-light.
+if compgen -G "/dev/gpiochip*" >/dev/null; then
+  "$APP_DIR/.venv/bin/pip" install --quiet gpiozero lgpio \
+    || warn "gpiozero/lgpio install failed - set BAGSIK_COIN_DRIVER=mock for now"
+fi
 chown -R "$SVC_USER:$SVC_USER" "$APP_DIR"
 
 # --------------------------------------------------------------------------
@@ -130,6 +138,7 @@ BAGSIK_COIN_DRIVER=gpio
 BAGSIK_GPIO_PIN=17
 BAGSIK_COIN_PULSE_CENTAVOS=100
 BAGSIK_COIN_IDLE_SECONDS=1.2
+BAGSIK_COIN_ARM_SECONDS=120
 
 BAGSIK_DEV_MODE=false
 EOF
@@ -205,6 +214,6 @@ echo "    Credentials   : in $ENV_FILE (BAGSIK_ADMIN_USER / BAGSIK_ADMIN_PASSWOR
 echo "    Database      : $DATA_DIR/bagsik.db"
 echo
 echo "    Logs          : journalctl -u bagsik -f"
-echo "    Coin acceptor : set BAGSIK_COIN_DRIVER=gpio once the acceptor is wired"
-echo "                    to GPIO17 (3.3V logic - use an optocoupler)."
+echo "    Coin acceptor : gpio on GPIO17 (3.3V logic - use an optocoupler)"
+echo "                    see INSTALL.md section 4 for wiring and testing"
 echo "    Next steps    : systemctl status bagsik hostapd dnsmasq"
