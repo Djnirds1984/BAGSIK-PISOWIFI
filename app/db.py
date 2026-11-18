@@ -26,6 +26,9 @@ DEFAULT_SETTINGS = {
     "grace_seconds": "60",
     "kiosk_voucher_enabled": "1",
     "show_rates_on_portal": "1",
+    "net_wan_iface": "",
+    "net_hotspot_ifaces": "",
+    "net_hotspot_ip": "",
 }
 
 DEFAULT_PLANS = [

@@ -129,13 +129,17 @@ BAGSIK_ADMIN_PASSWORD=$ADMIN_PASS
 BAGSIK_SESSION_HOURS=12
 
 BAGSIK_ROUTER_DRIVER=local
+# Fallback only: Admin -> Settings -> Hotspot server assigns eth0 to the uplink
+# and every other wired port to the hotspot side, and wins once it is saved.
 BAGSIK_LAN_IFACE=$LAN_IFACE
 BAGSIK_WAN_IFACE=$WAN_IFACE
 BAGSIK_LAN_CIDR=$LAN_CIDR
 BAGSIK_ENFORCE_SECONDS=10
 
 BAGSIK_COIN_DRIVER=gpio
-BAGSIK_GPIO_PIN=17
+# Fallback only: the pulse pin is picked in Admin -> Settings -> Coin hardware
+# (default physical pin 3 = GPIO2 on a Pi, PA12 on an Orange Pi).
+BAGSIK_GPIO_PIN=2
 BAGSIK_COIN_PULSE_CENTAVOS=100
 BAGSIK_COIN_IDLE_SECONDS=1.2
 BAGSIK_COIN_ARM_SECONDS=120
@@ -214,6 +218,6 @@ echo "    Credentials   : in $ENV_FILE (BAGSIK_ADMIN_USER / BAGSIK_ADMIN_PASSWOR
 echo "    Database      : $DATA_DIR/bagsik.db"
 echo
 echo "    Logs          : journalctl -u bagsik -f"
-echo "    Coin acceptor : gpio on GPIO17 (3.3V logic - use an optocoupler)"
-echo "                    see INSTALL.md section 4 for wiring and testing"
+echo "    Coin acceptor : gpio, pulse pin picked in Admin > Settings > Coin hardware"
+echo "                    default physical pin 3 (GPIO2 / PA12); see INSTALL.md 4"
 echo "    Next steps    : systemctl status bagsik hostapd dnsmasq"

@@ -53,7 +53,15 @@ def test_dashboard_json_feeds_the_live_tables(client, csrf):
 def test_every_admin_page_renders(client, csrf):
     _login(client, csrf)
 
-    for path in ("/admin/vouchers", "/admin/plans", "/admin/sessions", "/admin/coins", "/admin/settings"):
+    for path in (
+        "/admin/vouchers",
+        "/admin/plans",
+        "/admin/sessions",
+        "/admin/coins",
+        "/admin/settings",
+        "/admin/settings/hardware",
+        "/admin/settings/hotspot",
+    ):
         response = client.get(path)
         assert response.status_code == 200, path
 

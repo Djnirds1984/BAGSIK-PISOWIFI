@@ -243,9 +243,50 @@ If `hostapd` is not active, see [8. Troubleshooting](#8-troubleshooting).
    minutes; the portal never asks the customer to choose one.
 3. **Vouchers** - generate a small batch, print the sheet, redeem one code on a
    phone to prove the portal grants time.
-4. **Coins & cash** - the acceptor health line should read `gpio`, `ready: true`
-   and the pin number.
-5. Wire the coin acceptor (next section).
+4. **Settings -> Coin hardware** - pick the board and confirm the pulse pin
+   (default physical pin 3). The live card should read `gpio`, a green dot and
+   the BCM/line number the driver is using.
+5. **Settings -> Hotspot server** - check that `eth0` is the WAN uplink and every
+   other wired port is a hotspot server; adjust the address if the box is not
+   `10.0.0.1`.
+6. Wire the coin acceptor (next section).
+
+### 3.8 WAN and hotspot ports in the admin console
+
+**Admin -> Settings -> Hotspot server** lists every wired NIC the kernel sees
+(`eth0`, `eth1`, `enp3s0`, ...) with its state, MAC and IPv4 address, and one
+role per port:
+
+| Role | Meaning |
+| --- | --- |
+| WAN (uplink) | the port that reaches the internet - normally `eth0` |
+| Hotspot server | a customer port: switch, access point in bridge mode, direct cable |
+| Not used | spare NIC, or a port kept for something else |
+
+The default is the wiring most PisoWiFi boxes use: `eth0` uplink, `eth1`,
+`eth2`... as hotspot servers. A second port that is not plugged in yet can be
+typed into **Hotspot ports not plugged in yet** - it is saved and picked up as
+soon as the NIC appears.
+
+Saving applies immediately: the `local` driver rebuilds its nftables table and
+one HTB shaping tree per hotspot port, so a device keeps its speed limit when it
+moves from `eth1` to `eth2`. All hotspot ports share one subnet and one DHCP
+range, which is why the page also shows the installer command:
+
+```bash
+sudo LAN_IFACE=eth1 WAN_IFACE=eth0 LAN_IP=10.0.0.1 ./deploy/install.sh
+```
+
+Extra hotspot ports need the same address before dnsmasq answers on them:
+
+```bash
+sudo ip addr add 10.0.0.1/24 dev eth2
+```
+
+`BAGSIK_LAN_IFACE` / `BAGSIK_WAN_IFACE` in the env file stay as the fallback for
+a box that has never been configured; once the console has a saved assignment it
+wins. A mini PC with a single NIC can still be a hotspot: the customer side is
+the Wi-Fi interface created by `hostapd`, and the wired port stays the uplink.
 
 ---
 
@@ -259,13 +300,35 @@ If `hostapd` is not active, see [8. Troubleshooting](#8-troubleshooting).
 | `GND` | 12 V PSU `-` **and** Pi GND (common ground) |
 | `COIN` (pulse) | PC817 pin 1 through a 1 kOhm resistor |
 | PC817 pin 2 | 12 V PSU `-` |
-| PC817 pin 4 | Pi GPIO17 (BCM 17 = physical pin 11) |
+| PC817 pin 4 | Pi GPIO2 (BCM 2, physical pin 3) |
 | PC817 pin 3 | Pi GND |
 
 The optocoupler keeps the 12 V acceptor isolated from the 3.3 V pin, which uses
 its internal pull-up: every pulse pulls it low.
 
-### 4.2 Programming the acceptor
+### 4.2 Choose the board and pin in the admin console
+
+Open **Admin -> Settings -> Coin hardware**. The board selector exposes the pin
+list for that board, because the same physical hole is called something else on
+every family:
+
+| Board | Physical pin 3 is | Driver uses |
+| --- | --- | --- |
+| Raspberry Pi 3B+ / 4 / 5 | GPIO2 | BCM 2 |
+| Orange Pi One / PC | PA12 | gpiochip line 12 |
+| Mini PC x86_64 + NodeMCU 8266 | no header | host + port instead of a pin |
+
+- The default is physical **pin 3** on both 40-pin boards.
+- Only safe pins are offered; power, ground and the HAT EEPROM pins are hidden.
+- Saving restarts the coin listener immediately - no service restart.
+- A mini PC has no GPIO. Selecting it replaces the pin list with the NodeMCU
+  bridge address. The bridge firmware does not exist yet, so the slot stays
+  closed and the page says so.
+
+`BAGSIK_GPIO_PIN` in the env file is only a fallback for a board the app cannot
+identify; the page wins everywhere else.
+
+### 4.3 Programming the acceptor
 
 Program it so **one pulse = one peso** (many units do this from the factory or
 through their SET routine). Then a P1 coin emits 1 pulse, a P5 coin 5 pulses,
@@ -275,19 +338,19 @@ If your acceptor cannot be reprogrammed, raise `BAGSIK_COIN_PULSE_CENTAVOS` to
 the value of one pulse instead (for example `500` if it emits a single pulse for
 a P5 coin).
 
-### 4.3 Relevant settings
+### 4.4 Relevant settings
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `BAGSIK_COIN_DRIVER` | `gpio` (appliance) | `gpio` for real pulses, `mock` for the simulator |
-| `BAGSIK_GPIO_PIN` | `17` | BCM pin the pulse line is wired to |
+| `BAGSIK_GPIO_PIN` | `17` | fallback BCM/line number, only when the board cannot be identified |
 | `BAGSIK_COIN_PULSE_CENTAVOS` | `100` | value of one pulse, in centavos |
 | `BAGSIK_COIN_IDLE_SECONDS` | `1.2` | quiet time that ends a coin burst |
 | `BAGSIK_COIN_ARM_SECONDS` | `120` | how long an **Insert Coin** tap keeps the slot open |
 
 Edit `/etc/bagsik/bagsik.env`, then `sudo systemctl restart bagsik`.
 
-### 4.4 Test it
+### 4.5 Test it
 
 ```bash
 sudo journalctl -u bagsik -f
@@ -411,10 +474,10 @@ prefixed with `BAGSIK_`. Restart the service after editing.
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `bagsik123` | used only to seed the first admin |
 | `SESSION_HOURS` | `12` | admin cookie lifetime |
 | `ROUTER_DRIVER` | `mock` | `local` (nftables + tc on this box) or `mock` |
-| `LAN_IFACE` / `WAN_IFACE` / `LAN_CIDR` | `auto` | interface override; `auto` = detect |
+| `LAN_IFACE` / `WAN_IFACE` / `LAN_CIDR` | `auto` | interface override; `auto` = detect (Settings -> Hotspot server wins) |
 | `ENFORCE_SECONDS` | `10` | how often sessions are checked and re-pushed (min 2) |
 | `COIN_DRIVER` | `mock` | `gpio` or `mock` |
-| `GPIO_PIN` | `17` | BCM pin the acceptor pulses |
+| `GPIO_PIN` | `17` | fallback BCM/line number; the *Coin hardware* page sets the pin |
 | `COIN_PULSE_CENTAVOS` | `100` | centavos per pulse (min 1) |
 | `COIN_IDLE_SECONDS` | `1.2` | quiet time that ends a burst (min 0.2) |
 | `COIN_ARM_SECONDS` | `120` | lifetime of an Insert Coin window (min 15) |

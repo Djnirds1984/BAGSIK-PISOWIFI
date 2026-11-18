@@ -6,6 +6,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import db, deps, security, utils
+from ..hardware import pins as coin_pins
+from ..netctl import interfaces as net_ports
 from ..services import billing, catalog, sessions, stats, vouchers
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -484,6 +486,202 @@ def settings_save(
         actor=admin["username"],
     )
     return deps.flash("/admin/settings", msg="Settings saved.")
+
+
+# --------------------------------------------------------------------------- #
+# Coin hardware (board + pin)
+# --------------------------------------------------------------------------- #
+@router.get("/settings/hardware", response_class=HTMLResponse)
+def hardware_page(request: Request, board: str = ""):
+    admin = deps.require_admin(request)
+    values = catalog.all_settings()
+    saved = values.get("coin_board", "auto")
+    choice = board if board in coin_pins.BOARD_IDS else saved
+    target = coin_pins.current_target(choice, values.get("coin_pin", coin_pins.DEFAULT_PIN))
+    detected = coin_pins.detect_board()
+    return deps.render(
+        request,
+        "admin/hardware.html",
+        {
+            "admin": admin,
+            "values": values,
+            "choice": choice,
+            "resolved": target,
+            "pin": target["physical"] or coin_pins.DEFAULT_PIN,
+            "pins": coin_pins.pin_options(target["board"]) if target["gpio"] else [],
+            "boards": coin_pins.board_choices(choice),
+            "detected": detected,
+            "detected_label": coin_pins.board_label(detected),
+            "coin_health": request.app.state.coin.health(),
+            "env_driver": request.app.state.settings.coin_driver,
+            "env_pin": request.app.state.settings.gpio_pin,
+            "saved": "coin_board" in values,
+        },
+    )
+
+
+@router.post("/settings/hardware")
+def hardware_save(
+    request: Request,
+    board: str = Form("auto"),
+    pin: str = Form(str(coin_pins.DEFAULT_PIN)),
+    nodemcu_host: str = Form(""),
+    nodemcu_port: str = Form("8080"),
+    csrf_token: str = Form(""),
+):
+    admin = deps.require_admin(request)
+    deps.verify_csrf(request, csrf_token)
+    if board not in coin_pins.BOARD_IDS:
+        board = "auto"
+
+    # Resolve 'auto' to a real board first, then validate the pin the operator
+    # sent instead of quietly falling back to the default.
+    target = coin_pins.current_target(board, coin_pins.DEFAULT_PIN)
+    if target["gpio"]:
+        chosen = coin_pins.resolve(target["board"], pin)
+        if not chosen["ok"]:
+            return deps.flash(
+                f"/admin/settings/hardware?board={board}",
+                err=f"Pin {pin} is not a GPIO pin on this board.",
+            )
+        target = chosen
+
+    values = {
+        "coin_board": board,
+        "coin_nodemcu_host": nodemcu_host.strip(),
+        "coin_nodemcu_port": str(min(65535, max(1, _to_int(nodemcu_port, 8080)))),
+    }
+    if target["gpio"]:
+        values["coin_pin"] = str(target["physical"])
+    catalog.update_settings(values, actor=admin["username"])
+
+    # Apply it now so the operator can drop a coin without restarting anything.
+    driver = "mock" if request.app.state.settings.coin_driver == "mock" else target["driver"]
+    request.app.state.coin.apply(driver, target["backend_pin"])
+
+    if target["gpio"]:
+        msg = f"Coin slot now listens on physical pin {target['physical']} ({target['name']})."
+    else:
+        msg = "Saved. The slot stays closed until the NodeMCU bridge firmware is installed."
+    return deps.flash("/admin/settings/hardware", msg=msg)
+
+
+# --------------------------------------------------------------------------- #
+# Hotspot server (WAN uplink + customer ports)
+# --------------------------------------------------------------------------- #
+def _hotspot_defaults(values: dict[str, str], settings) -> tuple[str, list[str]]:
+    """Saved assignment, else the wiring default from the ports this box has."""
+    detected = [port["name"] for port in net_ports.list_ethernet()]
+    saved_hotspots = net_ports.split_names(values.get("net_hotspot_ifaces", ""))
+    env_names = [name for name in (settings.lan_iface, settings.wan_iface) if name and name != "auto"]
+    return net_ports.default_assignment(
+        detected or env_names or saved_hotspots,
+        values.get("net_wan_iface", ""),
+        saved_hotspots,
+    )
+
+
+@router.get("/settings/hotspot", response_class=HTMLResponse)
+def hotspot_page(request: Request):
+    admin = deps.require_admin(request)
+    settings = request.app.state.settings
+    values = catalog.all_settings()
+    wan, hotspots = _hotspot_defaults(values, settings)
+
+    address = values.get("net_hotspot_ip", "")
+    if not address:
+        cidr = settings.lan_cidr
+        address = cidr.split("/")[0] if cidr and cidr != "auto" else "10.0.0.1"
+
+    health = request.app.state.router.health()
+    live_lans = health.get("lan_ifaces") or net_ports.split_names(str(health.get("lan_iface", "")))
+    return deps.render(
+        request,
+        "admin/hotspot.html",
+        {
+            "admin": admin,
+            "rows": net_ports.assign_rows(net_ports.list_ethernet(), wan, hotspots),
+            "wan": wan,
+            "hotspots": hotspots,
+            "address": address,
+            "router_health": health,
+            "live_lans": live_lans or hotspots,
+            "live_wan": health.get("wan_iface") or wan,
+            "env_lan": settings.lan_iface,
+            "env_wan": settings.wan_iface,
+            "saved": bool(values.get("net_hotspot_ifaces")),
+        },
+    )
+
+
+@router.post("/settings/hotspot")
+async def hotspot_save(request: Request):
+    admin = deps.require_admin(request)
+    form = await request.form()
+    deps.verify_csrf(request, str(form.get("csrf_token", "")))
+
+    # One role select per detected port, so the names arrive as role:eth1=hotspot.
+    roles = {
+        str(key)[len("role:"):].strip(): str(value)
+        for key, value in form.multi_items()
+        if str(key).startswith("role:")
+    }
+    wan = str(form.get("wan_name", "")).strip() or next(
+        (name for name, role in roles.items() if role == "wan"), ""
+    )
+    hotspots = [name for name, role in roles.items() if role == "hotspot"]
+    for name in net_ports.split_names(str(form.get("hotspot_names", ""))):
+        if name not in hotspots:
+            hotspots.append(name)
+    for name in net_ports.split_names(str(form.get("extra", ""))):
+        if name not in hotspots:
+            hotspots.append(name)
+    hotspots = [name for name in hotspots if name != wan]
+
+    if not wan:
+        return deps.flash("/admin/settings/hotspot", err="Pick the port that carries the internet uplink (eth0).")
+    names = [wan, *hotspots]
+    if any(not net_ports.valid_name(name) for name in names):
+        return deps.flash(
+            "/admin/settings/hotspot",
+            err="Port names may only contain letters, digits, '.', '_' or '-'.",
+        )
+    if not hotspots:
+        return deps.flash(
+            "/admin/settings/hotspot",
+            err="Pick at least one hotspot port - a second NIC or the Wi-Fi interface.",
+        )
+    address = str(form.get("address", "")).strip()
+    if not net_ports.valid_ipv4(address):
+        return deps.flash("/admin/settings/hotspot", err=f"'{address}' is not an IPv4 address.")
+
+    catalog.update_settings(
+        {
+            "net_wan_iface": wan,
+            "net_hotspot_ifaces": ",".join(hotspots),
+            "net_hotspot_ip": address,
+        },
+        actor=admin["username"],
+    )
+
+    # Apply now: the local driver rebuilds nftables and the tc trees in place.
+    try:
+        applied = bool(request.app.state.router.set_interfaces(hotspots, wan, f"{address}/24"))
+    except Exception as exc:
+        return deps.flash(
+            "/admin/settings/hotspot",
+            err=f"Saved, but the router driver rejected the change: {exc}",
+        )
+    if applied:
+        _sync(request)
+
+    msg = (
+        f"Hotspot server enforces on {', '.join(hotspots)}; {wan} is the uplink "
+        f"at {address}/24."
+    )
+    if not applied:
+        msg += " A mock driver keeps simulating - the local driver applies this on the appliance."
+    return deps.flash("/admin/settings/hotspot", msg=msg)
 
 
 @router.post("/account/password")

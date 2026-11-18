@@ -1,9 +1,15 @@
 {% extends "admin/base.html" %}
 {% block title %}Settings - {{ biz.business_name }}{% endblock %}
 {% block page_title %}Settings{% endblock %}
-{% block page_sub %}Branding, portal text and operator password{% endblock %}
+{% block page_sub %}Branding, portal text, coin hardware, hotspot ports and operator password{% endblock %}
 
 {% block content %}
+<nav class="subtabs">
+  <a href="/admin/settings" class="active">Business &amp; portal</a>
+  <a href="/admin/settings/hardware">Coin hardware</a>
+  <a href="/admin/settings/hotspot">Hotspot server</a>
+</nav>
+
 <div class="grid grid-side">
   <div class="stack">
     <div class="card">
@@ -121,8 +127,10 @@
         (dnsmasq), routing and shaping.</p>
         <p>The <span class="mono">local</span> router driver needs <span class="mono">nftables</span>,
         <span class="mono">iproute2</span> and root (systemd unit handles that).</p>
-        <p>Set the coin driver to <span class="mono">gpio</span> in
-        <span class="mono">/etc/bagsik/bagsik.env</span> once the acceptor is wired.</p>
+        <p>Board and coin pulse pin are set in
+        <a href="/admin/settings/hardware">Coin hardware</a>; the slot itself is
+        enabled with <span class="mono">BAGSIK_COIN_DRIVER=gpio</span> in
+        <span class="mono">/etc/bagsik/bagsik.env</span>.</p>
         <p style="margin:0">Backups: copy <span class="mono">{{ settings.db_path }}</span>.</p>
       </div>
     </div>

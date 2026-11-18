@@ -56,6 +56,14 @@ class RouterDriver(ABC):
         """Resolve the MAC address currently holding an IP."""
         return None
 
+    def set_interfaces(self, lans: Sequence[str], wan: str = "", cidr: str = "") -> bool:
+        """Point the driver at the hotspot/uplink ports saved in the console.
+
+        Returns True when the driver can enforce on those ports; the mock driver
+        keeps simulating and returns False.
+        """
+        return False
+
     def health(self) -> dict[str, Any]:
         return {"driver": self.name, "state": "ok"}
 

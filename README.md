@@ -66,12 +66,18 @@ out. Everything runs offline in a single Python process with a SQLite file.
 | `GND` | 12 V PSU `-` **and** Pi GND (common ground) |
 | `COIN` (pulse) | PC817 pin 1 through a 1 kΩ resistor |
 | PC817 pin 2 | 12 V PSU `-` |
-| PC817 pin 4 | Pi GPIO17 (BCM, physical pin 11) |
+| PC817 pin 4 | Pi GPIO2 (BCM 2, physical pin 3) |
 | PC817 pin 3 | Pi GND |
 
 The optocoupler keeps the 12 V acceptor isolated from the 3.3 V GPIO. The pin
-uses the Pi's internal pull-up, so each pulse pulls it low - exactly what
+uses the internal pull-up, so each pulse pulls it low - exactly what
 `gpiozero.Button` expects.
+
+The pulse pin is chosen in the admin console (**Settings -> Coin hardware**),
+by board and by the pin number printed on the 40-pin header. The default is
+physical pin 3: GPIO2 on a Raspberry Pi 3B+, PA12 on an Orange Pi One/PC. A
+mini PC has no header, so it selects a NodeMCU 8266 bridge instead (that
+firmware is not written yet, so the slot stays closed).
 
 Program the acceptor so **one pulse = one peso** (most acceptors do this from
 the factory or via their SET routine). Then a ₱1 coin emits 1 pulse, a ₱5 coin
@@ -163,12 +169,14 @@ nft list table inet bagsik          # the enforcement table
 1. Join the `BAGSIK PISOWIFI` SSID and open <http://10.0.0.1/>.
 2. Sign in at `/admin` and **change the operator password**.
 3. Set the business name, portal text and print footer in *Settings*.
-4. Review the four seeded coin bundles (₱1/5 min, ₱5/30 min, ₱10/75 min,
+4. In *Settings -> Hotspot server*, confirm `eth0` is the WAN uplink and every
+   other wired port is a hotspot server (eth1, eth2, ...).
+5. Review the four seeded coin bundles (₱1/5 min, ₱5/30 min, ₱10/75 min,
    ₱20/3 h) and adjust the price-to-minutes rates, caps and speeds.
-5. Generate a voucher batch, print the tickets, redeem one from a phone.
-6. Wire the acceptor, confirm `BAGSIK_COIN_DRIVER=gpio`, then
+6. Generate a voucher batch, print the tickets, redeem one from a phone.
+7. Wire the acceptor, confirm `BAGSIK_COIN_DRIVER=gpio`, then
    `systemctl restart bagsik` and insert a coin.
-7. Tap *Insert Coin* on a phone, drop a coin and watch the session start on the
+8. Tap *Insert Coin* on a phone, drop a coin and watch the session start on the
    dashboard once the acceptor goes quiet.
 
 ## Operating guide
@@ -228,10 +236,10 @@ and are prefixed with `BAGSIK_`.
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `bagsik123` | seeded only when the database has no admin yet |
 | `SESSION_HOURS` | `12` | admin cookie lifetime |
 | `ROUTER_DRIVER` | `mock` | `local` (nftables + tc) or `mock` |
-| `LAN_IFACE` / `WAN_IFACE` / `LAN_CIDR` | `auto` | interface override; `auto` = detect |
+| `LAN_IFACE` / `WAN_IFACE` / `LAN_CIDR` | `auto` | interface override; `auto` = detect (the *Hotspot server* page wins) |
 | `ENFORCE_SECONDS` | `10` | how often sessions are checked and re-pushed |
 | `COIN_DRIVER` | `mock` | `gpio` or `mock` |
-| `GPIO_PIN` | `17` | BCM pin the acceptor pulses |
+| `GPIO_PIN` | `17` | fallback BCM/line number; the *Coin hardware* page sets the pin |
 | `COIN_PULSE_CENTAVOS` | `100` | value of one pulse (₱1.00) |
 | `COIN_IDLE_SECONDS` | `1.2` | quiet time that ends a coin burst |
 | `COIN_ARM_SECONDS` | `120` | how long an Insert Coin tap keeps the slot open |
@@ -239,7 +247,10 @@ and are prefixed with `BAGSIK_`.
 | `DEV_MODE` | `false` | exposes the kiosk coin simulator; keep off in production |
 
 Business settings (name, portal text, grace period, kiosk toggles) live in the
-database and are editable from *Settings* - no restart needed.
+database and are editable from *Settings* - no restart needed. Interface roles do
+too: *Settings -> Hotspot server* stores the WAN uplink and every customer port
+(`eth0` uplink, `eth1`/`eth2`... hotspot servers) and applies them without a
+restart.
 
 ## Tests
 
@@ -248,10 +259,12 @@ database and are editable from *Settings* - no restart needed.
 .venv\Scripts\python.exe -m pytest
 ```
 
-53 tests cover the portal flow, CSRF, voucher lifecycle, coin ledger splitting,
-the coin flow (arming, exclusive lock, settlement), the kiosk checkout, session
-expiry/data caps/pause/extend, the nftables script builder and every admin page.
-They run on the mock drivers, so no hardware, root or Linux is required.
+73 tests cover the portal flow, CSRF, voucher lifecycle, coin ledger splitting,
+the coin flow (arming, exclusive lock, settlement), the board/pin map behind the
+*Coin hardware* page, the WAN/hotspot port assignment behind the *Hotspot server*
+page, the kiosk checkout, session expiry/data caps/pause/extend, the nftables
+script builder and every admin page. They run on the mock drivers, so no
+hardware, root or Linux is required.
 
 ## Project layout
 
@@ -273,9 +286,12 @@ app/
     stats.py         dashboard numbers
   netctl/
     base.py          driver contract (Grant / Usage)
+    interfaces.py    wired NIC discovery + role defaults (admin hotspot page)
     local.py         nftables + tc on this box (the real one)
     mock.py          in-memory simulation (dev + tests)
-  hardware/coin.py   GPIO pulse counter, mock acceptor
+  hardware/
+    coin.py          GPIO pulse counter, mock acceptor, NodeMCU stub
+    pins.py          board profiles + physical pin map (admin hardware page)
   routers/           portal, kiosk, admin, captive probes
   templates/         portal + admin pages (Jinja)
   static/            app.css, admin.js, portal.js

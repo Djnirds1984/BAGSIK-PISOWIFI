@@ -1,0 +1,158 @@
+{% extends "admin/base.html" %}
+{% block title %}Coin hardware - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Coin hardware{% endblock %}
+{% block page_sub %}Board, coin pulse pin and coin transport{% endblock %}
+
+{% block content %}
+<nav class="subtabs">
+  <a href="/admin/settings">Business &amp; portal</a>
+  <a href="/admin/settings/hardware" class="active">Coin hardware</a>
+  <a href="/admin/settings/hotspot">Hotspot server</a>
+</nav>
+
+<div class="grid grid-side">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head">
+        <h2>Board</h2>
+        <span class="hint">detected: {{ detected_label }}</span>
+      </div>
+      <div class="card-body">
+        <div class="board-grid">
+          {% for b in boards %}
+          <a class="board-pick{{ ' is-on' if b.active }}"
+             href="/admin/settings/hardware?board={{ b.id }}">
+            <strong>{{ b.name }}</strong>
+            <span>{{ b.family }}</span>
+          </a>
+          {% endfor %}
+        </div>
+        <p class="hint" style="margin:12px 0 0">
+          Pins are numbered exactly as printed on the 40-pin header, so the same
+          number is the same hole on a Raspberry Pi and an Orange Pi - only the
+          signal name changes.
+        </p>
+      </div>
+    </div>
+
+    {% if resolved.gpio %}
+    <form method="post" action="/admin/settings/hardware">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="board" value="{{ choice }}">
+      <div class="card">
+        <div class="card-head">
+          <h2>Coin pulse pin</h2>
+          <span class="hint">{{ resolved.board_label }}</span>
+        </div>
+        <div class="card-body">
+          <div class="form-grid" style="grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr)">
+            <div class="field">
+              <label for="pin">Which pin is the acceptor wired to?</label>
+              <select id="pin" name="pin">
+                {% for option in pins %}
+                <option value="{{ option.value }}" {{ 'selected' if option.value == pin }}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+              <span class="hint">Pulse line through the optocoupler, ground shared with the acceptor.</span>
+            </div>
+            <div class="field">
+              <label>What the driver sees</label>
+              <div class="pin-readout">
+                <strong>Pin {{ resolved.physical }}</strong>
+                <span class="mono">{{ resolved.name }}</span>
+                <span class="hint">line {{ resolved.backend_pin }}</span>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit">Save pin assignment</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <form method="post" action="/admin/settings/hardware">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="board" value="{{ choice }}">
+      <div class="card">
+        <div class="card-head">
+          <h2>NodeMCU 8266 bridge</h2>
+          <span class="hint">no GPIO header</span>
+        </div>
+        <div class="card-body">
+          <div class="flash" style="margin:0 0 14px">
+            Bridge firmware is not installed yet. The address below is stored so
+            the ESP8266 can be pointed at this box later; until then the coin
+            slot stays closed.
+          </div>
+          <div class="form-grid" style="grid-template-columns: minmax(0, 2fr) minmax(0, 1fr)">
+            <div class="field">
+              <label for="nodemcu_host">Bridge address</label>
+              <input id="nodemcu_host" type="text" name="nodemcu_host"
+                     placeholder="192.168.4.20"
+                     value="{{ values.get('coin_nodemcu_host', '') }}">
+              <span class="hint">Where the ESP8266 listens on the customer network.</span>
+            </div>
+            <div class="field">
+              <label for="nodemcu_port">Port</label>
+              <input id="nodemcu_port" type="number" name="nodemcu_port" min="1" max="65535"
+                     value="{{ values.get('coin_nodemcu_port', '8080') }}">
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit">Save bridge</button>
+        </div>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Live state</h2><span class="hint">acceptor</span></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Transport</dt>
+          <dd>
+            <span class="dot {{ 'dot-ok' if coin_health.ready else 'dot-bad' }}"></span>
+            {{ coin_health.driver }}
+          </dd>
+          <dt>Listening on</dt>
+          <dd class="mono">
+            {% if coin_health.pin %}GPIO{{ coin_health.pin }}{% else %}&mdash;{% endif %}
+          </dd>
+          <dt>Pulses counted</dt><dd>{{ coin_health.events }}</dd>
+          <dt>Ignored</dt><dd>{{ coin_health.ignored_pulses }} <span class="hint">(slot was shut)</span></dd>
+          <dt>Saved choice</dt>
+          <dd class="mono">
+            {% if saved %}
+              {% if resolved.gpio %}pin {{ pin }} &middot; {{ resolved.name }}{% else %}NodeMCU bridge{% endif %}
+            {% else %}not set yet{% endif %}
+          </dd>
+        </dl>
+        {% if coin_health.error %}
+        <div class="flash flash-err" style="margin:14px 0 0">{{ coin_health.error }}</div>
+        {% endif %}
+        {% if env_driver == 'mock' %}
+        <div class="flash" style="margin:14px 0 0">
+          Development build: <span class="mono">BAGSIK_COIN_DRIVER=mock</span>, so
+          the kiosk simulator is driving the slot and this pin is stored but not
+          read. On the appliance set <span class="mono">BAGSIK_COIN_DRIVER=gpio</span>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>How the pin is used</h2></div>
+      <div class="card-body" style="font-size:.82rem;color:var(--muted)">
+        <p>The default is physical <strong>pin 3</strong>: GPIO2 on a Raspberry
+        Pi 3B+, PA12 on an Orange Pi One/PC. One pulse is worth
+        <span class="mono">{{ coin_health.pulse_centavos }}</span> centavos.</p>
+        <p>Saving here restarts the listener immediately and overrides
+        <span class="mono">BAGSIK_GPIO_PIN</span>; a coin already counted stays
+        in the wallet.</p>
+        <p style="margin:0">If the board cannot be detected, the slot falls back
+        to <span class="mono">BAGSIK_GPIO_PIN={{ env_pin }}</span>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

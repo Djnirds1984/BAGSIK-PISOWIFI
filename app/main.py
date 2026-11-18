@@ -15,12 +15,54 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db, tasks
 from .config import get_settings
+from .hardware import pins as coin_pins
 from .hardware.coin import build_acceptor
 from .netctl import build_driver
 from .routers import admin, captive, portal
 from .services import coinflow, sessions
 
 log = logging.getLogger("bagsik")
+
+
+def _apply_saved_hardware(app: FastAPI) -> None:
+    """Start the acceptor on the board/pin saved in the admin console.
+
+    BAGSIK_COIN_DRIVER=mock stays the master switch (development, tests). For a
+    real slot the admin page wins; BAGSIK_GPIO_PIN is only a fallback for a
+    board we cannot identify, where the operator still wants a plain line.
+    """
+    settings = app.state.settings
+    if settings.coin_driver == "mock":
+        return
+    from .services import catalog
+
+    target = coin_pins.current_target(
+        catalog.setting("coin_board", "auto"),
+        catalog.setting("coin_pin", coin_pins.DEFAULT_PIN),
+    )
+    if target["driver"] == "nodemcu" and settings.coin_driver == "gpio":
+        app.state.coin.apply("gpio", settings.gpio_pin)
+        return
+    app.state.coin.apply(target["driver"], target["backend_pin"])
+
+
+def _apply_saved_network(app: FastAPI) -> None:
+    """Enforce on the hotspot ports picked in Admin > Settings > Hotspot server.
+
+    BAGSIK_LAN_IFACE / BAGSIK_WAN_IFACE stay as the fallback for a fresh box;
+    once the console has a saved assignment it wins.
+    """
+    from .services import catalog
+
+    hotspots = [name.strip() for name in catalog.setting("net_hotspot_ifaces", "").split(",") if name.strip()]
+    if not hotspots:
+        return
+    address = catalog.setting("net_hotspot_ip", "").strip()
+    app.state.router.set_interfaces(
+        hotspots,
+        catalog.setting("net_wan_iface", "").strip(),
+        f"{address}/24" if address else "",
+    )
 
 
 @asynccontextmanager
@@ -79,6 +121,15 @@ def create_app() -> FastAPI:
     app.state.router = build_driver(settings)
     app.state.coin = build_acceptor(settings)
     app.state.coinflow = coinflow.CoinFlow(app.state.coin, app.state.router)
+    try:
+        _apply_saved_hardware(app)
+    except Exception:
+        log.exception("could not apply the saved coin hardware - using the env defaults")
+
+    try:
+        _apply_saved_network(app)
+    except Exception:
+        log.exception("could not apply the saved hotspot ports - using the env defaults")
 
     app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
     app.include_router(captive.router)

@@ -40,7 +40,7 @@ class CoinAcceptor:
         idle_seconds: float = 1.2,
         arm_seconds: float = 120.0,
     ) -> None:
-        self.driver = driver if driver in {"mock", "gpio"} else "mock"
+        self.driver = driver if driver in {"mock", "gpio", "nodemcu"} else "mock"
         self.pin = pin
         self.pulse_centavos = max(1, pulse_centavos)
         self.idle_seconds = idle_seconds
@@ -61,9 +61,31 @@ class CoinAcceptor:
     def start(self) -> None:
         if self.driver == "gpio":
             self._start_gpio()
+        elif self.driver == "nodemcu":
+            # The bridge firmware is not written yet: accept the setting but
+            # keep the slot shut and say so, instead of silently losing coins.
+            self.ready = False
+            self.last_error = "NodeMCU bridge firmware is not installed yet"
+            log.info("coin acceptor waiting for the NodeMCU bridge (no firmware yet)")
         else:
             self.ready = True
             log.info("coin acceptor running in mock mode")
+
+    def apply(self, driver: str, pin: int | None = None) -> bool:
+        """Switch driver/pin in place (the admin hardware page). True if changed."""
+        driver = driver if driver in {"mock", "gpio", "nodemcu"} else "mock"
+        pin = int(pin) if pin is not None else self.pin
+        if driver == self.driver and pin == self.pin:
+            return False
+        self.stop()
+        with self._lock:
+            self.driver = driver
+            self.pin = pin
+        self.last_error = ""
+        self._stopped.clear()
+        self.start()
+        log.info("coin hardware applied: driver=%s pin=%s", driver, pin)
+        return True
 
     def stop(self) -> None:
         self._stopped.set()
@@ -222,20 +244,42 @@ class CoinAcceptor:
     def _start_gpio(self) -> None:
         try:
             from gpiozero import Button  # hardware only
-        except Exception as exc:  # not a Pi, or gpiozero missing
+        except Exception as exc:  # not an SBC, or gpiozero missing
             self.last_error = f"gpiozero unavailable: {exc}"
             self.ready = False
             log.warning("GPIO coin driver disabled: %s", self.last_error)
             return
-        try:
-            self._button = Button(self.pin, pull_up=True, bounce_time=0.02)
-            self._button.when_pressed = self._on_pulse
-            self.ready = True
-            log.info("coin acceptor listening on GPIO%s", self.pin)
-        except Exception as exc:  # pragma: no cover - hardware failure
-            self.last_error = f"GPIO{self.pin} init failed: {exc}"
+        # lgpio talks to any /dev/gpiochip, which is how one code path reaches
+        # both a Raspberry Pi and an Orange Pi header. Plain gpiozero (its
+        # board default) is the fallback.
+        button = None
+        error = ""
+        for factory in self._pin_factories():
+            try:
+                button = Button(self.pin, pull_up=True, bounce_time=0.02, pin_factory=factory)
+                break
+            except Exception as exc:  # pragma: no cover - hardware failure
+                error = f"GPIO{self.pin} init failed: {exc}"
+        if button is None:  # pragma: no cover - hardware failure
+            self.last_error = error or f"GPIO{self.pin} init failed"
             self.ready = False
             log.warning("GPIO coin driver disabled: %s", self.last_error)
+            return
+        self._button = button
+        self._button.when_pressed = self._on_pulse
+        self.ready = True
+        log.info("coin acceptor listening on GPIO%s", self.pin)
+
+    @staticmethod
+    def _pin_factories():
+        """Yield the pin backends to try, most portable first."""
+        try:
+            from gpiozero.pins.lgpio import LGPIOFactory
+
+            yield LGPIOFactory()
+        except Exception:  # no lgpio on this box
+            pass
+        yield None
 
     def _on_pulse(self) -> None:
         if self._stopped.is_set():

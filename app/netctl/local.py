@@ -11,12 +11,13 @@ Enforcement model
     captive portal lives - it is answered by the input chain, not forwarded).
   * Every live session gets an explicit accept rule plus a named counter, so
     the dashboard reads real byte totals per device.
-  * ``tc`` HTB classes shape download per client IP on the LAN interface, and
+  * ``tc`` HTB classes shape download per client IP on every hotspot port, and
     an ingress policer shapes upload.
 
 Interfaces are auto-detected: the default-route NIC is the uplink, the
 remaining NIC with an IPv4 address (Wi-Fi preferred) is the customer side.
-Set BAGSIK_LAN_IFACE / BAGSIK_WAN_IFACE / BAGSIK_LAN_CIDR to override.
+Set BAGSIK_LAN_IFACE / BAGSIK_WAN_IFACE / BAGSIK_LAN_CIDR to override, or pick
+the ports in Admin > Settings > Hotspot server, which wins over the env file.
 
 Everything is rebuilt from the grant list on each sync, and counter values are
 carried across rebuilds so data caps stay accurate.
@@ -59,6 +60,7 @@ class LocalRouter(RouterDriver):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.lan = settings.lan_iface
+        self.lans: list[str] = []
         self.wan = settings.wan_iface
         self.lan_cidr = settings.lan_cidr
         self._lock = threading.Lock()
@@ -77,8 +79,36 @@ class LocalRouter(RouterDriver):
         self._nft(self._base_rules())
         self._ready = True
         log.info(
-            "local router ready: lan=%s (%s) wan=%s", self.lan, self.lan_cidr, self.wan or "?"
+            "local router ready: lan=%s (%s) wan=%s",
+            ",".join(self._lan_list()),
+            self.lan_cidr,
+            self.wan or "?",
         )
+
+    def set_interfaces(self, lans: Sequence[str], wan: str = "", cidr: str = "") -> bool:
+        """Use the hotspot/uplink ports saved in Admin > Settings > Hotspot server.
+
+        Applied without a restart: the next sync rebuilds nftables and the tc
+        trees, so a port added or removed takes effect immediately.
+        """
+        clean: list[str] = []
+        for raw in lans or []:
+            name = str(raw).strip()
+            if name and name not in clean:
+                clean.append(name)
+        if not clean:
+            return False
+        previous = self._lan_list()
+        changed = clean != previous or (bool(wan) and wan != self.wan) or (bool(cidr) and cidr != self.lan_cidr)
+        self.lans = clean
+        self.lan = clean[0]
+        if wan:
+            self.wan = wan
+        if cidr:
+            self.lan_cidr = cidr
+        if changed:
+            self._ready = False
+        return True
 
     def sync(self, grants: Sequence[Grant]) -> None:
         if not self._ready:
@@ -121,7 +151,8 @@ class LocalRouter(RouterDriver):
         return {
             "driver": self.name,
             "state": "ok" if self._ready else ("error" if self._last_error else "init"),
-            "lan_iface": self.lan,
+            "lan_iface": ",".join(self._lan_list()) or self.lan,
+            "lan_ifaces": self._lan_list(),
             "wan_iface": self.wan,
             "lan_cidr": self.lan_cidr,
             "grants": len(self._grant_map),
@@ -129,7 +160,13 @@ class LocalRouter(RouterDriver):
         }
 
     def describe(self) -> dict[str, Any]:
-        return {"driver": self.name, "lan": self.lan, "wan": self.wan, "cidr": self.lan_cidr}
+        return {"driver": self.name, "lan": self._lan_list(), "wan": self.wan, "cidr": self.lan_cidr}
+
+    def _lan_list(self) -> list[str]:
+        """Customer-side ports in use (falls back to the single LAN interface)."""
+        if self.lans:
+            return list(self.lans)
+        return [self.lan] if self.lan and self.lan != "auto" else []
 
     # -- interface discovery ----------------------------------------------
     def _resolve_interfaces(self) -> None:
@@ -174,6 +211,9 @@ class LocalRouter(RouterDriver):
             self.lan_cidr = self._ipv4_cidr(self.lan) or ""
             if not self.lan_cidr:
                 raise RouterError(f"interface {self.lan} has no IPv4 address - check dnsmasq/static IP")
+
+        if not self.lans:
+            self.lans = [self.lan]
 
     def _ipv4_cidr(self, iface: str) -> str | None:
         try:
@@ -264,54 +304,58 @@ class LocalRouter(RouterDriver):
 
     # -- tc shaping --------------------------------------------------------
     def _sync_tc(self, grants: Sequence[Grant]) -> None:
+        """One HTB tree per hotspot port, so a device is shaped on every port."""
+        lans = self._lan_list()
         shaped = [grant for grant in grants if grant.ip and grant.down_kbps > 0]
-        try:
-            self._run(["tc", "qdisc", "replace", "dev", self.lan, "root", "handle", ROOT_QDISC, "htb", "default", str(DEFAULT_CLASS)])
-            self._run(
-                ["tc", "class", "replace", "dev", self.lan, "parent", ROOT_QDISC,
-                 "classid", f"{ROOT_QDISC}{DEFAULT_CLASS}", "htb", "rate", "1000mbit"]
-            )
-        except RouterError as exc:
-            self._last_error = f"tc root: {exc}"
-            return
-
-        for index, grant in enumerate(grants, start=1):
-            if not grant.ip or grant.down_kbps <= 0:
-                continue
-            classid = f"{ROOT_QDISC}{index}"
+        for lan in lans:
             try:
+                self._run(["tc", "qdisc", "replace", "dev", lan, "root", "handle", ROOT_QDISC, "htb", "default", str(DEFAULT_CLASS)])
                 self._run(
-                    ["tc", "class", "replace", "dev", self.lan, "parent", ROOT_QDISC,
-                     "classid", classid, "htb", "rate", f"{grant.down_kbps}kbit",
-                     "ceil", f"{grant.down_kbps}kbit", "burst", "32k"]
-                )
-                self._run(
-                    ["tc", "filter", "replace", "dev", self.lan, "parent", ROOT_QDISC,
-                     "protocol", "ip", "prio", "1", "u32", "match", "ip", "dst",
-                     f"{grant.ip}/32", "flowid", classid]
+                    ["tc", "class", "replace", "dev", lan, "parent", ROOT_QDISC,
+                     "classid", f"{ROOT_QDISC}{DEFAULT_CLASS}", "htb", "rate", "1000mbit"]
                 )
             except RouterError as exc:
-                self._last_error = f"tc class {grant.ip}: {exc}"
+                self._last_error = f"tc root {lan}: {exc}"
+                continue
+
+            for index, grant in enumerate(grants, start=1):
+                if not grant.ip or grant.down_kbps <= 0:
+                    continue
+                classid = f"{ROOT_QDISC}{index}"
+                try:
+                    self._run(
+                        ["tc", "class", "replace", "dev", lan, "parent", ROOT_QDISC,
+                         "classid", classid, "htb", "rate", f"{grant.down_kbps}kbit",
+                         "ceil", f"{grant.down_kbps}kbit", "burst", "32k"]
+                    )
+                    self._run(
+                        ["tc", "filter", "replace", "dev", lan, "parent", ROOT_QDISC,
+                         "protocol", "ip", "prio", "1", "u32", "match", "ip", "dst",
+                         f"{grant.ip}/32", "flowid", classid]
+                    )
+                except RouterError as exc:
+                    self._last_error = f"tc class {grant.ip} on {lan}: {exc}"
 
         if shaped:
-            self._sync_ingress([grant for grant in grants if grant.ip and grant.up_kbps > 0])
+            self._sync_ingress([grant for grant in grants if grant.ip and grant.up_kbps > 0], lans)
 
-    def _sync_ingress(self, grants: Sequence[Grant]) -> None:
-        try:
-            self._run(["tc", "qdisc", "replace", "dev", self.lan, "handle", INGRESS_QDISC, "ingress"])
-        except RouterError as exc:
-            self._last_error = f"tc ingress: {exc}"
-            return
-        for grant in grants:
+    def _sync_ingress(self, grants: Sequence[Grant], lans: Sequence[str]) -> None:
+        for lan in lans:
             try:
-                self._run(
-                    ["tc", "filter", "replace", "dev", self.lan, "parent", INGRESS_QDISC,
-                     "protocol", "ip", "prio", "1", "u32", "match", "ip", "src",
-                     f"{grant.ip}/32", "police", "rate", f"{grant.up_kbps}kbit",
-                     "burst", "32k", "drop", "flowid", ":1"]
-                )
+                self._run(["tc", "qdisc", "replace", "dev", lan, "handle", INGRESS_QDISC, "ingress"])
             except RouterError as exc:
-                self._last_error = f"tc police {grant.ip}: {exc}"
+                self._last_error = f"tc ingress {lan}: {exc}"
+                continue
+            for grant in grants:
+                try:
+                    self._run(
+                        ["tc", "filter", "replace", "dev", lan, "parent", INGRESS_QDISC,
+                         "protocol", "ip", "prio", "1", "u32", "match", "ip", "src",
+                         f"{grant.ip}/32", "police", "rate", f"{grant.up_kbps}kbit",
+                         "burst", "32k", "drop", "flowid", ":1"]
+                    )
+                except RouterError as exc:
+                    self._last_error = f"tc police {grant.ip} on {lan}: {exc}"
 
     # -- process helpers ---------------------------------------------------
     def _run(self, args: list[str], stdin: str | None = None, check: bool = True) -> str:

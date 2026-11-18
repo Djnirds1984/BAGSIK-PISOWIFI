@@ -1,0 +1,184 @@
+{% extends "admin/base.html" %}
+{% block title %}Hotspot server - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Hotspot server{% endblock %}
+{% block page_sub %}WAN uplink and the ports that serve customers{% endblock %}
+
+{% block content %}
+{% set dash %}&mdash;{% endset %}
+<nav class="subtabs">
+  <a href="/admin/settings">Business &amp; portal</a>
+  <a href="/admin/settings/hardware">Coin hardware</a>
+  <a href="/admin/settings/hotspot" class="active">Hotspot server</a>
+</nav>
+
+<div class="grid grid-side">
+  <div class="stack">
+    <form method="post" action="/admin/settings/hotspot">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="card">
+        <div class="card-head">
+          <h2>Ethernet ports</h2>
+          <span class="hint">{{ rows|length }} wired port(s) seen</span>
+        </div>
+        <div class="card-body">
+          {% if rows %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Port</th>
+                  <th>State</th>
+                  <th>MAC</th>
+                  <th>IPv4</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td class="mono">{{ row.name }}</td>
+                  <td>
+                    <span class="badge {{ 'badge-ok' if row.state == 'up' else ('badge-muted' if row.state == 'not detected' else 'badge-warn') }}">{{ row.state }}</span>
+                  </td>
+                  <td class="mono" style="font-size:.76rem">{{ row.mac or dash }}</td>
+                  <td class="mono" style="font-size:.76rem">{{ row.ipv4 or dash }}</td>
+                  <td>
+                    <select name="role:{{ row.name }}" class="port-role">
+                      <option value="wan" {{ 'selected' if row.role == 'wan' }}>WAN (uplink)</option>
+                      <option value="hotspot" {{ 'selected' if row.role == 'hotspot' }}>Hotspot server</option>
+                      <option value="off" {{ 'selected' if row.role == 'off' }}>Not used</option>
+                    </select>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="field" style="margin:14px 0 0">
+            <label for="extra">Hotspot ports not plugged in yet</label>
+            <input id="extra" type="text" name="extra" placeholder="eth3, eth4">
+            <span class="hint">Comma separated. Saved now, enforced as soon as the NIC appears.</span>
+          </div>
+          {% else %}
+          <div class="flash" style="margin:0 0 14px">
+            This host exposes no wired ports from inside the app - a development
+            machine, or a box whose NICs are named something else. Type the names
+            the appliance will use; they are saved and applied there.
+          </div>
+          <div class="form-grid" style="grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)">
+            <div class="field">
+              <label for="wan_name">WAN uplink</label>
+              <input id="wan_name" type="text" name="wan_name" value="{{ wan }}" placeholder="eth0">
+            </div>
+            <div class="field">
+              <label for="hotspot_names">Hotspot server ports</label>
+              <input id="hotspot_names" type="text" name="hotspot_names"
+                     value="{{ hotspots|join(', ') }}" placeholder="eth1, eth2">
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Hotspot network</h2>
+          <span class="hint">installer settings</span>
+        </div>
+        <div class="card-body">
+          <div class="form-grid" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)">
+            <div class="field">
+              <label for="address">Box address on the customer side</label>
+              <input id="address" type="text" name="address" value="{{ address }}" placeholder="10.0.0.1">
+              <span class="hint">The /24 prefix is fixed, matching <span class="mono">deploy/install.sh</span>.</span>
+            </div>
+            <div class="field">
+              <label>What gets served</label>
+              <div class="pin-readout">
+                <strong>{{ hotspots|join(', ') or 'no hotspot port' }}</strong>
+                <span class="mono">{{ address }}/24</span>
+                <span class="hint">DHCP + NAT on every port</span>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit">Save hotspot ports</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Installer command</h2>
+        <span class="hint">run on the appliance</span>
+      </div>
+      <div class="card-body">
+        <pre class="cmd">sudo LAN_IFACE={{ hotspots[0] if hotspots else 'eth1' }} WAN_IFACE={{ wan or 'eth0' }} LAN_IP={{ address }} ./deploy/install.sh</pre>
+        {% if hotspots|length > 1 %}
+        <p class="hint" style="margin:10px 0 0">
+          The installer addresses the first hotspot port. The others need the same
+          address before dnsmasq can answer on them:
+        </p>
+        <pre class="cmd" style="margin-top:8px">{% for name in hotspots[1:] %}sudo ip addr add {{ address }}/24 dev {{ name }}
+{% endfor %}</pre>
+        {% else %}
+        <p class="hint" style="margin:10px 0 0">
+          One hotspot port: the installer addresses it and dnsmasq serves the
+          single subnet. Add a second NIC and it shows up above after a reload.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Live state</h2><span class="hint">router driver</span></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Driver</dt>
+          <dd>
+            <span class="dot {{ 'dot-ok' if router_health.state == 'ok' else 'dot-bad' }}"></span>
+            {{ router_health.driver }} &middot; {{ router_health.state }}
+          </dd>
+          <dt>Hotspot ports</dt><dd class="mono">{{ live_lans|join(', ') or dash }}</dd>
+          <dt>Uplink</dt><dd class="mono">{{ live_wan or dash }}</dd>
+          <dt>Customer subnet</dt><dd class="mono">{{ router_health.lan_cidr or (address ~ '/24') }}</dd>
+          <dt>Enforced devices</dt><dd>{{ router_health.grants or 0 }}</dd>
+          <dt>Saved choice</dt>
+          <dd class="mono">{{ 'set' if saved else 'default from the wiring' }}</dd>
+        </dl>
+        {% if router_health.error %}
+        <div class="flash flash-err" style="margin:14px 0 0">{{ router_health.error }}</div>
+        {% endif %}
+        {% if router_health.driver == 'mock' %}
+        <div class="flash" style="margin:14px 0 0">
+          Development build: <span class="mono">BAGSIK_ROUTER_DRIVER=mock</span>, so
+          the assignment is stored and shown but nothing is enforced. On the
+          appliance the <span class="mono">local</span> driver owns nftables and tc.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>How the ports are used</h2></div>
+      <div class="card-body" style="font-size:.82rem;color:var(--muted)">
+        <p><strong>eth0</strong> carries the internet. Every other wired port is a
+        hotspot server: a switch, an access point in bridge mode, or a direct
+        cable to a PC.</p>
+        <p>Each customer session gets an accept rule in the
+        <span class="mono">forward</span> chain and a shaped class on
+        <strong>every</strong> hotspot port, so moving a device from eth1 to eth2
+        keeps its speed limit.</p>
+        <p>All ports share one subnet (<span class="mono">{{ address }}/24</span>),
+        which is what lets dnsmasq hand out one DHCP range. Wi-Fi still comes from
+        the radio the installer configures (<span class="mono">hostapd</span>).</p>
+        <p style="margin:0">Saving here overrides
+        <span class="mono">BAGSIK_LAN_IFACE={{ env_lan }}</span> and
+        <span class="mono">BAGSIK_WAN_IFACE={{ env_wan }}</span>; those stay as the
+        fallback for a box that has never been configured.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
