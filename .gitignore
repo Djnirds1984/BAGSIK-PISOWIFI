@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Runtime data (voucher database, logs, backups)
+data/
+*.db
+*.db-wal
+*.db-shm
+logs/
+
+# Local configuration / secrets
+.env
+.env.local
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build artefacts
+dist/
+build/

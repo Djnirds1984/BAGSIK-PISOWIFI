@@ -1,0 +1,175 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}
+  <span data-stat="clock">{{ clock }}</span> &middot; {{ stats.live }} device(s) online
+{% endblock %}
+{% block topbar_actions %}
+  <span class="status-pill">Router <span id="router-state" class="status-pill">
+    <span class="dot {{ 'dot-ok' if router_health.state == 'ok' else 'dot-bad' }}"></span>{{ router_health.state }}
+  </span></span>
+  <span class="status-pill">Coin <span id="coin-state" class="status-pill">
+    <span class="dot {{ 'dot-ok' if coin_health.ready else 'dot-bad' }}"></span>{{ 'ok' if coin_health.ready else 'offline' }}
+  </span></span>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-4" style="margin-bottom:14px">
+  <div class="stat">
+    <div class="stat-label">Revenue today</div>
+    <div class="stat-value" data-stat="revenue">{{ stats.revenue_centavos | money }}</div>
+    <div class="stat-hint">
+      <span class="{{ 'delta-up' if stats.delta_pct >= 0 else 'delta-down' }}" data-stat="delta">{{ '%+d' % stats.delta_pct }}%</span>
+      vs yesterday ({{ stats.yesterday_centavos | money }})
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Online now</div>
+    <div class="stat-value" data-stat="live">{{ stats.live }}</div>
+    <div class="stat-hint"><span data-stat="started_today">{{ stats.started_today }}</span> sessions started today</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Data served today</div>
+    <div class="stat-value small" data-stat="data">{{ stats.bytes_today | bytes }}</div>
+    <div class="stat-hint">coins in: {{ stats.coins_inserted_centavos | money }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Kiosk wallet</div>
+    <div class="stat-value small" data-stat="wallet">{{ stats.wallet_centavos | money }}</div>
+    <div class="stat-hint"><span data-stat="unused">{{ stats.vouchers_unused }}</span> unused vouchers on hand</div>
+  </div>
+</div>
+
+<div class="grid grid-side" style="margin-bottom:14px">
+  <div class="card">
+    <div class="card-head">
+      <h2>Revenue by hour</h2>
+      <span class="hint">coins + admin vouchers</span>
+    </div>
+    <div class="card-body">
+      <div class="bars">
+        {% for bucket in hourly %}
+          <div class="bar {{ 'is-empty' if bucket.centavos == 0 }}"
+               style="height: {{ bucket.pct if bucket.pct > 3 else 3 }}%"
+               title="{{ '%02d:00' % bucket.hour }} &middot; {{ bucket.centavos | money }}"></div>
+        {% endfor %}
+      </div>
+      <div class="bar-labels"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Last 7 days</h2>
+      <span class="hint">{{ weekly | sum(attribute='centavos') | money }}</span>
+    </div>
+    <div class="card-body">
+      <div class="week">
+        {% for day in weekly %}
+        <div class="week-row">
+          <span class="muted">{{ day.label }}</span>
+          <span class="week-track"><span class="week-fill" style="width: {{ day.pct }}%"></span></span>
+          <span class="week-value">{{ day.centavos | money }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-side" style="margin-bottom:14px">
+  <div class="card">
+    <div class="card-head">
+      <h2>Who is online</h2>
+      <a class="btn btn-sm btn-ghost" href="/admin/sessions">Manage</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Device</th><th>Plan</th><th>Time left</th><th>Used</th>
+            <th>Cap</th><th>Speed</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="live-sessions">
+          {% for row in live_sessions %}
+          <tr class="{{ 'is-paused' if row.status == 'paused' }}">
+            <td><span class="mono">{{ row.mac }}</span><br><small>{{ row.ip or '-' }}</small></td>
+            <td>{{ row.plan_name }}</td>
+            <td class="num">{{ remaining(row) | seconds }}</td>
+            <td class="num">{{ row.bytes_used | bytes }}</td>
+            <td class="num"><small>{{ (row.data_cap_bytes | bytes) if row.data_cap_bytes else 'no cap' }}</small></td>
+            <td><small>{{ row.rate_down_kbps }}/{{ row.rate_up_kbps }} kbps</small></td>
+            <td><span class="badge {{ 'badge-ok' if row.status == 'active' else 'badge-warn' }}">{{ row.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty">No one is online right now.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Plan mix (7 days)</h2></div>
+      <div class="card-body">
+        {% for item in mix %}
+        <div class="week-row" style="grid-template-columns: 1fr 74px 62px">
+          <span>{{ item.plan }}</span>
+          <span class="week-track"><span class="week-fill" style="width: {{ item.pct }}%"></span></span>
+          <span class="week-value">{{ item.count }}x</span>
+        </div>
+        {% else %}
+        <div class="empty">No sessions yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Activity</h2></div>
+      <div class="card-body" style="font-size:.8rem">
+        {% for item in audit %}
+        <div style="padding:5px 0;border-bottom:1px solid rgba(34,49,76,.5)">
+          <span class="mono" style="color:var(--muted)">{{ item.created_at | dt_time }}</span>
+          <strong style="font-weight:600"> {{ item.action }}</strong>
+          <span class="muted"> &middot; {{ item.actor }}</span>
+          {% if item.detail %}<div class="muted">{{ item.detail }}</div>{% endif %}
+        </div>
+        {% else %}
+        <div class="empty">Nothing logged yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Recently ended sessions</h2>
+    <span class="hint">{{ router_health.driver }} driver &middot; LAN {{ router_health.lan_iface or '-' }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>#</th><th>Device</th><th>Plan</th><th>Started</th><th>Ended</th><th>Used</th><th>Reason</th></tr>
+      </thead>
+      <tbody>
+        {% for row in recent %}
+        <tr>
+          <td class="num muted">{{ row.id }}</td>
+          <td class="mono">{{ row.mac }}</td>
+          <td>{{ row.plan_name }}</td>
+          <td class="num">{{ row.started_at | dt_short }}</td>
+          <td class="num">{{ row.ended_at | dt_short }}</td>
+          <td class="num">{{ row.bytes_used | bytes }}</td>
+          <td><small>{{ row.end_reason or '-' }}</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No finished sessions yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

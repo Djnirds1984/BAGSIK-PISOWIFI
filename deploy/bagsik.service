@@ -1,0 +1,36 @@
+[Unit]
+Description=BAGSIK PISOWIFI
+Documentation=file:///opt/bagsik/README.md
+After=network-online.target hostapd.service dnsmasq.service
+Wants=network-online.target
+# nftables is where the enforcement table lives; the app recreates it anyway.
+After=nftables.service
+
+[Service]
+Type=simple
+User=bagsik
+Group=bagsik
+WorkingDirectory=/opt/bagsik
+EnvironmentFile=/etc/bagsik/bagsik.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/bagsik/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 80 --proxy-headers --no-server-header
+Restart=always
+RestartSec=3
+
+# The app owns an nftables table and tc qdiscs, and binds port 80 as a
+# non-root user. These are the only elevated things it needs.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# SQLite database lives here (StateDirectory makes /var/lib/bagsik for us).
+StateDirectory=bagsik
+StateDirectoryMode=0750
+ReadWritePaths=/var/lib/bagsik
+
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

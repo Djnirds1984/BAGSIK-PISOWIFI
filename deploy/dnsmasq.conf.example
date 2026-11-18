@@ -1,0 +1,29 @@
+# BAGSIK PISOWIFI DHCP + DNS (dnsmasq)
+# Installed to /etc/dnsmasq.d/bagsik.conf by deploy/install.sh.
+# __LAN__/__LAN_IP__/__LAN_START__/__LAN_END__ are replaced by the installer.
+
+interface=__LAN__
+bind-interfaces
+
+# Customers get an address on the box's own subnet; the box is their gateway
+# and DNS server. Keep the lease short so a returning device re-joins quickly.
+dhcp-range=__LAN_START__,__LAN_END__,255.255.255.0,1h
+dhcp-option=3,__LAN_IP__      # default gateway
+dhcp-option=6,__LAN_IP__      # DNS
+
+# RFC 8910 captive portal advertisement: phones and laptops open the portal
+# straight away instead of waiting for an internet probe to fail.
+dhcp-option=114,http://__LAN_IP__/
+
+# Do not hand out a second DNS server; that would let clients bypass redirects.
+no-resolv
+server=1.1.1.1
+server=8.8.8.8
+cache-size=1000
+
+# The portal hostname resolves even when a session is not running.
+address=/bagsik.local/__LAN_IP__
+domain-needed
+bogus-priv
+
+log-dhcp

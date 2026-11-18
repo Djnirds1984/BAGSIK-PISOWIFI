@@ -1,0 +1,120 @@
+{% extends "admin/base.html" %}
+{% block title %}Coin rates - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Coin rates{% endblock %}
+{% block page_sub %}
+  What each coin bundle buys: price in, minutes out, applied greedily largest-first.
+  <a href="/admin/plans?inactive=1">Show inactive</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:14px">
+  <div class="card-head"><h2>New coin bundle</h2><span class="hint">price is in pesos</span></div>
+  <div class="card-body">
+    <form method="post" action="/admin/plans/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-grid">
+        <div class="field span-2">
+          <label for="name">Name</label>
+          <input id="name" type="text" name="name" placeholder="PISO 10 - 75 mins" required>
+        </div>
+        <div class="field">
+          <label for="price">Bundle price (&#8369;)</label>
+          <input id="price" type="text" name="price" value="10" inputmode="decimal" required>
+        </div>
+        <div class="field">
+          <label for="minutes">Minutes granted</label>
+          <input id="minutes" type="number" name="minutes" value="60" min="1" required>
+        </div>
+        <div class="field">
+          <label for="cap">Data cap (MB, 0 = none)</label>
+          <input id="cap" type="number" name="data_cap_mb" value="0" min="0">
+        </div>
+        <div class="field">
+          <label for="down">Download (kbps)</label>
+          <input id="down" type="number" name="down_kbps" value="5000" min="0">
+        </div>
+        <div class="field">
+          <label for="up">Upload (kbps)</label>
+          <input id="up" type="number" name="up_kbps" value="2000" min="0">
+        </div>
+        <div class="field">
+          <label for="sort">Sort order</label>
+          <input id="sort" type="number" name="sort_order" value="100">
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit">Create bundle</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  {% for plan in plans %}
+  <div class="card">
+    <div class="card-head">
+      <h2>{{ plan.name }}</h2>
+      <span class="badge {{ 'badge-ok' if plan.is_active else 'badge-muted' }}">
+        {{ 'active' if plan.is_active else 'hidden' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/plans/{{ plan.id }}/update">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr))">
+          <div class="field" style="grid-column: span 2">
+            <label>Name</label>
+            <input type="text" name="name" value="{{ plan.name }}" required>
+          </div>
+          <div class="field">
+            <label>Bundle price (&#8369;)</label>
+            <input type="text" name="price" value="{{ '%.2f' % (plan.price_centavos / 100) }}" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>Minutes granted</label>
+            <input type="number" name="minutes" value="{{ plan.duration_minutes }}" min="1">
+          </div>
+          <div class="field">
+            <label>Cap (MB)</label>
+            <input type="number" name="data_cap_mb" value="{{ plan.data_cap_mb }}" min="0">
+          </div>
+          <div class="field">
+            <label>Sort</label>
+            <input type="number" name="sort_order" value="{{ plan.sort_order }}">
+          </div>
+          <div class="field">
+            <label>Down (kbps)</label>
+            <input type="number" name="down_kbps" value="{{ plan.rate_down_kbps }}" min="0">
+          </div>
+          <div class="field">
+            <label>Up (kbps)</label>
+            <input type="number" name="up_kbps" value="{{ plan.rate_up_kbps }}" min="0">
+          </div>
+        </div>
+        <div class="row between">
+          <div class="row">
+            <button class="btn btn-sm btn-primary" type="submit">Save</button>
+          </div>
+        </div>
+      </form>
+      <div class="row" style="margin-top:10px;gap:8px">
+        <form method="post" action="/admin/plans/{{ plan.id }}/toggle">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-sm btn-ghost" type="submit">
+            {{ 'Hide from coin rates' if plan.is_active else 'Show on coin rates' }}
+          </button>
+        </form>
+        <form method="post" action="/admin/plans/{{ plan.id }}/delete"
+              data-confirm="Delete {{ plan.name }}? Rates with sales are hidden instead.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+        </form>
+        <span class="spacer"></span>
+        <small class="muted">{{ plan.duration_minutes | minutes }} &middot;
+          {{ plan.data_cap_mb ~ ' MB' if plan.data_cap_mb else 'no cap' }}</small>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="card-body empty">No coin bundles yet - create one above.</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

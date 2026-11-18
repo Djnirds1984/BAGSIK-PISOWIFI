@@ -1,0 +1,102 @@
+{% extends "admin/base.html" %}
+{% block title %}Coins & cash - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Coins &amp; cash{% endblock %}
+{% block page_sub %}
+  Coin acceptor {{ 'ready' if coin_health.ready else 'offline' }} &middot; {{ coin_health.driver }} driver
+  {% if coin_health.error %} &middot; {{ coin_health.error }}{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-3" style="margin-bottom:14px">
+  <div class="stat">
+    <div class="stat-label">Wallet balance</div>
+    <div class="stat-value">{{ balance_centavos | money }}</div>
+    <div class="stat-hint">unspent coins waiting for the next insert</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Coins inserted today</div>
+    <div class="stat-value">{{ today.inserted_centavos | money }}</div>
+    <div class="stat-hint">gross cash into the slot</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Credit used today</div>
+    <div class="stat-value">{{ today.spent_centavos | money }}</div>
+    <div class="stat-hint">turned into sessions and vouchers</div>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-bottom:14px">
+  <div class="card">
+    <div class="card-head">
+      <h2>Manual entry</h2>
+      <span class="hint">coins that were not counted</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/coins/add">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="amount">Amount (&#8369;)</label>
+          <input id="amount" type="text" name="amount" placeholder="20.00" inputmode="decimal" required>
+        </div>
+        <p class="hint">Adds pending credit to the kiosk wallet and logs the reason.</p>
+        <button class="btn btn-primary" type="submit">Add credit</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Clear the wallet</h2>
+      <span class="hint">end of shift</span>
+    </div>
+    <div class="card-body">
+      <p class="hint">
+        Voids every pending coin entry without touching finished sessions.
+        Use this after collecting cash, or when coins were left behind.
+      </p>
+      <form method="post" action="/admin/coins/reset"
+            data-confirm="Void {{ balance_centavos | money }} of pending credit?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-danger" type="submit">Void pending credit</button>
+      </form>
+      <dl class="kv" style="margin-top:16px">
+        <dt>Acceptor</dt><dd>{{ coin_health.driver }} / {{ coin_health.pin or 'n/a' }}</dd>
+        <dt>Pulse value</dt><dd>{{ coin_health.pulse_centavos | money }}</dd>
+        <dt>Events</dt><dd>{{ coin_health.events }}</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Coin ledger</h2>
+    <span class="hint">last 120 entries</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>#</th><th>When</th><th>Amount</th><th>Source</th><th>Status</th><th>Session</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        {% for row in credits %}
+        <tr>
+          <td class="num muted">{{ row.id }}</td>
+          <td class="num">{{ row.created_at | dt_short }}</td>
+          <td class="num">{{ row.centavos | money }}</td>
+          <td><small>{{ row.source }}{% if row.pulses %} &middot; {{ row.pulses }}p{% endif %}</small></td>
+          <td>
+            {% set tone = {'pending': 'badge-warn', 'consumed': 'badge-ok', 'void': 'badge-bad'} %}
+            <span class="badge {{ tone.get(row.status, 'badge-muted') }}">{{ row.status }}</span>
+          </td>
+          <td><small>{{ ('#' ~ row.session_id) if row.session_id else '-' }}</small></td>
+          <td><small class="muted">{{ row.note }}</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No coins recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

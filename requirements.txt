@@ -1,0 +1,10 @@
+# BAGSIK PISOWIFI - runtime dependencies
+# Deliberately small: one ASGI framework, one template engine, one HTTP client.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+jinja2>=3.1,<4.0
+python-multipart>=0.0.20
+httpx>=0.28,<1.0
+# Zone database for hosts that do not ship one (Windows dev machines);
+# Linux appliances already have /usr/share/zoneinfo.
+tzdata>=2024.1

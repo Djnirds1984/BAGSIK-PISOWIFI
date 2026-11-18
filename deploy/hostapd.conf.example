@@ -1,0 +1,26 @@
+# BAGSIK PISOWIFI access point (hostapd)
+# Installed to /etc/hostapd/hostapd.conf by deploy/install.sh, then edited.
+# __LAN__ and __WLAN_PASSWORD__ are replaced by the installer.
+
+interface=__LAN__
+driver=nl80211
+ssid=BAGSIK PISOWIFI
+hw_mode=g
+channel=6
+ieee80211n=1
+wmm_enabled=1
+country_code=PH
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+
+# WPA2 - customers connect before they have a voucher. The portal is what
+# gates internet access, so the Wi-Fi password is just to keep the network
+# private. Leave this block commented out for an open hotspot.
+wpa=2
+wpa_passphrase=__WLAN_PASSWORD__
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+
+# Some low-end adapters drop the beacon when nobody is associated.
+# dtim_period=2

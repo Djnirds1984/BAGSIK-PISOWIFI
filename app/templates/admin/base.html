@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070d18">
+  <title>{% block title %}{{ biz.business_name }} admin{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-admin-live>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">BP</div>
+      <div class="brand-text">
+        <strong>{{ biz.business_name }}</strong>
+        <span>Admin</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a href="/admin" class="{{ 'active' if current_path in ['/admin', '/admin/'] }}">
+        <span class="ico">&#9636;</span> Dashboard
+      </a>
+      <a href="/admin/sessions" class="{{ 'active' if current_path.startswith('/admin/sessions') }}">
+        <span class="ico">&#9679;</span> Sessions
+      </a>
+      <a href="/admin/vouchers" class="{{ 'active' if current_path.startswith('/admin/vouchers') }}">
+        <span class="ico">&#9776;</span> Vouchers
+      </a>
+      <a href="/admin/plans" class="{{ 'active' if current_path.startswith('/admin/plans') }}">
+        <span class="ico">&#36;</span> Coin rates
+      </a>
+      <a href="/admin/coins" class="{{ 'active' if current_path.startswith('/admin/coins') }}">
+        <span class="ico">&#9673;</span> Coins &amp; cash
+      </a>
+
+      <div class="nav-sep">System</div>
+      <a href="/admin/settings" class="{{ 'active' if current_path.startswith('/admin/settings') }}">
+        <span class="ico">&#9881;</span> Settings
+      </a>
+      <a href="/" target="_blank" rel="noopener">
+        <span class="ico">&#8599;</span> Customer portal
+      </a>
+    </nav>
+
+    <form method="post" action="/admin/logout" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm btn-ghost btn-block" type="submit">Sign out</button>
+    </form>
+
+    <div class="sidebar-foot">
+      {{ settings.app_name }} v{{ app_version }}<br>
+      {{ settings.router_driver }} driver &middot; {{ settings.coin_driver }} coin
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="titles">
+        <h1>{% block page_title %}{% endblock %}</h1>
+        <p>{% block page_sub %}{% endblock %}</p>
+      </div>
+      <div class="topbar-actions">
+        {% block topbar_actions %}{% endblock %}
+        <span class="badge badge-muted">{{ admin.username }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+      {% include "partials/flash.html" %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+<script src="/static/admin.js"></script>
+</body>
+</html>

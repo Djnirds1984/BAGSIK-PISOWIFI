@@ -1,0 +1,30 @@
+#!/usr/sbin/nft -f
+#
+# BAGSIK PISOWIFI - NAT for the appliance itself.
+# Installed to /etc/nftables.d/bagsik-nat.nft and included from
+# /etc/nftables.conf by deploy/install.sh.
+#
+# This table is deliberately separate from `inet bagsik`, which the app
+# rebuilds on every sync. Sharing a table would mean the app deleting NAT.
+#
+# __LAN__ / __WAN__ / __LAN_CIDR__ are replaced by the installer.
+
+table inet bagsik_nat {
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        iifname "__LAN__" oifname "__WAN__" masquerade
+    }
+
+    # Force DNS through the box so URL filtering and the portal hostname
+    # cannot be bypassed by hard-coding 8.8.8.8 on the client.
+    chain dns_redirect {
+        type nat hook prerouting priority dstnat; policy accept;
+        iifname "__LAN__" ip daddr != __LAN_CIDR__ udp dport 53 redirect to :53
+        iifname "__LAN__" ip daddr != __LAN_CIDR__ tcp dport 53 redirect to :53
+    }
+}
+
+# Note: there is intentionally no blanket "redirect all HTTP to the portal".
+# dstnat runs before the forward chain, so it would also catch paying
+# customers. The portal is advertised through DHCP option 114 (see
+# dnsmasq.conf.example) and reached at http://__LAN_IP__/.

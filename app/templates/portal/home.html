@@ -1,0 +1,76 @@
+{% extends "portal/base.html" %}
+{% block title %}{{ biz.business_name }} - get online{% endblock %}
+
+{% block body %}
+<div class="portal-hero">
+  <div class="brand-mark">BP</div>
+  <h1>{{ biz.portal_headline or biz.business_name }}</h1>
+  <p>{{ biz.portal_subtext }}</p>
+</div>
+
+{% include "partials/flash.html" %}
+
+<div class="card">
+  <div class="card-head">
+    <h2>Redeem a voucher code</h2>
+    <span class="hint">8 characters</span>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/redeem" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="code-row">
+        <input type="text" name="code" placeholder="XXXX-XXXX" maxlength="12"
+               autocapitalize="characters" autocomplete="off" spellcheck="false" required>
+        <button class="btn btn-primary" type="submit">Connect</button>
+      </div>
+      <p class="hint" style="margin-top:10px">{{ biz.portal_contact }}</p>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Coin slot</h2>
+    {% if balance_centavos > 0 %}
+      <span class="badge badge-ok">{{ balance_centavos | money }} inserted</span>
+    {% else %}
+      <span class="hint">Piso, singko, sampu, bente</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <p class="muted" style="font-size:.85rem">Drop coins into the slot, then pick a plan on the kiosk screen.</p>
+    <a class="btn btn-block" href="/kiosk">Open coin kiosk &rarr;</a>
+  </div>
+</div>
+
+{% if biz.show_rates_on_portal == '1' and plans %}
+<div class="card">
+  <div class="card-head"><h2>Rates</h2></div>
+  <div class="card-body">
+    <div class="plan-grid">
+      {% for plan in plans %}
+      <div class="plan">
+        <strong>{{ plan.name }}</strong>
+        <div class="price">{{ plan.price_centavos | money }}</div>
+        <div class="spec">
+          {{ plan.duration_minutes | minutes }}
+          {% if plan.data_cap_mb %}· {{ plan.data_cap_mb }} MB{% endif %}
+          {% if plan.rate_down_kbps %}· {{ plan.rate_down_kbps }} kbps{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <div class="status-pill">
+      <span class="dot dot-ok"></span>
+      This device: <span class="mono">{{ mac or 'unknown' }}</span>
+      {% if ip %}· {{ ip }}{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

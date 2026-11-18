@@ -1,0 +1,129 @@
+{% extends "portal/base.html" %}
+{% block title %}Coin slot - {{ biz.business_name }}{% endblock %}
+
+{% block body %}
+<div data-kiosk data-csrf="{{ csrf_token }}"
+     data-phase="{{ coin_state.phase }}"
+     data-ready="{{ '1' if coin_state.coin_ready else '0' }}">
+  <div class="portal-hero">
+    <div class="brand-mark">BP</div>
+    <h1>Coin slot</h1>
+    <p>One customer at a time. Your time is added as soon as the slot goes quiet.</p>
+  </div>
+
+  {% include "partials/flash.html" %}
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Insert coins</h2>
+      <span class="status-pill">
+        <span class="dot {{ 'dot-ok' if coin_state.coin_ready else 'dot-bad' }}"></span>
+        <span data-coin-phase-label>{{ coin_state.phase }}</span>
+      </span>
+    </div>
+    <div class="card-body">
+      <p class="hint" style="margin:0 0 8px" data-coin-msg>
+        Tap Insert Coin, then drop &#8369;1, &#8369;5, &#8369;10 or &#8369;20.
+        There is no plan to choose - the posted coin rates decide your time.
+      </p>
+      <p class="hint" style="margin:0 0 12px" data-coin-count></p>
+
+      <form method="post" action="/coin/arm" data-busy="Opening the slot&hellip;"
+            data-coin-arm {% if coin_state.mine %}hidden{% endif %}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="to" value="/kiosk">
+        <button class="btn btn-primary btn-block" type="submit"
+                {% if not coin_state.coin_ready %}disabled{% endif %}>
+          {% if session %}Insert Additional Coins{% else %}Insert Coin{% endif %}
+        </button>
+      </form>
+
+      <form method="post" action="/coin/cancel" data-busy="Closing&hellip;"
+            data-coin-cancel {% if coin_state.phase not in ('listening', 'counting') %}hidden{% endif %}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="to" value="/kiosk">
+        <button class="btn btn-block" type="submit">Cancel &amp; release the slot</button>
+      </form>
+
+      <p class="hint" style="margin:12px 0 0">
+        Accepted: &#8369;1 &middot; &#8369;5 &middot; &#8369;10 &middot; &#8369;20.
+        A coin below the smallest rate stays on this device as credit.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Leftover credit</h2>
+      <span class="hint">Ready for the next insert</span>
+    </div>
+    <div class="card-body">
+      <div class="balance">
+        <span data-balance>{{ coin_state.balance_centavos | money }}</span>
+        <span class="unit">on this device</span>
+      </div>
+      {% if coin_state.session %}
+      <p class="hint" style="margin:8px 0 0">
+        Session: {{ coin_state.session.plan }} &middot;
+        ends {{ coin_state.session.ends_at | dt_time }}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if kiosk_voucher_enabled %}
+  <div class="card">
+    <div class="card-head">
+      <h2>Buy a code instead</h2>
+      <span class="hint">For another device</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/kiosk/buy" data-busy="Printing&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="voucher-plan">Coin bundle</label>
+          <select id="voucher-plan" name="plan_id">
+            {% for plan in plans %}
+              <option value="{{ plan.id }}">{{ plan.name }} &middot; {{ plan.price_centavos | money }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-block" type="submit"
+                {% if not plans or coin_state.balance_centavos < plans[0].price_centavos %}disabled{% endif %}>
+          Print my code
+        </button>
+      </form>
+      {% if not plans %}<div class="empty">No coin bundles are posted yet.</div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if coin_state.simulate %}
+  <div class="card sim-panel">
+    <div class="card-head">
+      <h2>Coin simulator <span class="tag-dev">dev</span></h2>
+      <span class="hint">No coin slot attached</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/kiosk/simulate-coin">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="to" value="/kiosk">
+        <div class="sim-grid">
+          <button class="btn" type="submit" name="centavos" value="100">&#8369;1</button>
+          <button class="btn" type="submit" name="centavos" value="500">&#8369;5</button>
+          <button class="btn" type="submit" name="centavos" value="1000">&#8369;10</button>
+          <button class="btn" type="submit" name="centavos" value="2000">&#8369;20</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body row between">
+      <span class="muted" style="font-size:.84rem">Back to the portal?</span>
+      <a class="btn btn-sm" href="/">Portal home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

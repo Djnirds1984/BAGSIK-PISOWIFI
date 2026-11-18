@@ -1,0 +1,126 @@
+{% extends "admin/base.html" %}
+{% block title %}Vouchers - {{ biz.business_name }}{% endblock %}
+{% block page_title %}Vouchers{% endblock %}
+{% block page_sub %}
+  {{ counts.unused }} unused &middot; {{ counts.active }} in use &middot; {{ counts.used }} used &middot; {{ counts.void }} cancelled
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-side" style="margin-bottom:14px">
+  <div class="card">
+    <div class="card-head">
+      <h2>Generate vouchers</h2>
+      <span class="hint">codes are unique, no 0/O or 1/I</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/vouchers/generate">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-grid">
+          <div class="field span-2">
+            <label for="plan">Plan</label>
+            <select id="plan" name="plan_id" required>
+              {% for plan in plans if plan.is_active %}
+                <option value="{{ plan.id }}">{{ plan.name }} &middot; {{ plan.price_centavos | money }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="quantity">Quantity</label>
+            <input id="quantity" type="number" name="quantity" value="20" min="1" max="1000">
+          </div>
+          <div class="field">
+            <label for="label">Batch label</label>
+            <input id="label" type="text" name="label" placeholder="e.g. Monday shift">
+          </div>
+          <div class="field span-2">
+            <label for="note">Note (printed on the ticket)</label>
+            <input id="note" type="text" name="note" maxlength="60">
+          </div>
+        </div>
+        <button class="btn btn-primary" type="submit">Create and print</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Batches</h2>
+      <span class="hint">last 20</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Label</th><th>Left</th><th></th></tr></thead>
+        <tbody>
+          {% for batch in batches %}
+          <tr>
+            <td class="num muted">{{ batch.id }}</td>
+            <td>
+              {{ batch.label }}<br>
+              <small>{{ batch.plan_name or '-' }} &middot; {{ batch.created_at | dt_short }}</small>
+            </td>
+            <td class="num">{{ batch.unused_count or 0 }}/{{ batch.quantity }}</td>
+            <td class="actions">
+              <a class="btn btn-sm" href="/admin/vouchers/print?batch={{ batch.id }}">Print</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No batches yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>All vouchers</h2>
+    <form method="get" action="/admin/vouchers" class="row" style="gap:8px">
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Search code or plan" style="width:190px">
+      <select name="status" style="width:130px">
+        <option value="">All statuses</option>
+        {% for key in ['unused', 'active', 'used', 'expired', 'void'] %}
+          <option value="{{ key }}" {{ 'selected' if filters.status == key }}>{{ key }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm" type="submit">Filter</button>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Code</th><th>Plan</th><th>Price</th><th>Status</th><th>Source</th><th>Created</th><th>Redeemed</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="mono">{{ item.code }}</td>
+          <td>{{ item.plan_name or '-' }}</td>
+          <td class="num">{{ item.price_centavos | money }}</td>
+          <td>
+            {% set tone = {'unused': 'badge-warn', 'active': 'badge-ok', 'used': 'badge-muted',
+                           'void': 'badge-bad', 'expired': 'badge-bad'} %}
+            <span class="badge {{ tone.get(item.status, 'badge-muted') }}">{{ item.status }}</span>
+          </td>
+          <td><small>{{ item.source }}</small></td>
+          <td class="num">{{ item.created_at | dt_short }}</td>
+          <td class="num">{{ item.redeemed_at | dt_short }}</td>
+          <td class="actions">
+            {% if item.status in ['unused', 'used', 'expired'] %}
+            <form method="post" action="/admin/vouchers/{{ item.id }}/void"
+                  data-confirm="Cancel voucher {{ item.code }}?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-danger" type="submit">Cancel</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No vouchers match that filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "portal/base.html" %}
+{% block title %}You are online - {{ biz.business_name }}{% endblock %}
+
+{% block body %}
+<div class="portal-hero">
+  <div class="brand-mark">BP</div>
+  <h1>You are online</h1>
+  <p>{{ session.plan }} · {{ mac }}</p>
+</div>
+
+{% include "partials/flash.html" %}
+
+<div class="card" data-session-live
+     data-remaining="{{ session.remaining_seconds }}"
+     data-total="{{ session.time_cap_seconds }}">
+  <div class="card-body">
+    {% if session.status == 'paused' %}
+      <div class="flash flash-err" style="margin-bottom:12px">This session is paused by the attendant.</div>
+    {% endif %}
+    <div class="countdown" data-countdown>{{ session.remaining_seconds | seconds }}</div>
+    <div class="meter"><span data-meter style="width:100%"></span></div>
+    <div class="row between" style="font-size:.78rem;color:var(--muted)">
+      <span>time left</span>
+      <span>{{ session.started_at | dt_short }} · ends {{ session.ends_at | dt_time }}</span>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+
+    <div class="kv">
+      <dt>Data used</dt><dd data-used>{{ session.bytes_used | bytes }}</dd>
+      <dt>Data cap</dt>
+      <dd>{{ (session.data_cap_bytes | bytes) if session.data_cap_bytes else 'No cap' }}</dd>
+      <dt>Speed</dt>
+      <dd>
+        {% if session.rate_down_kbps %}
+          {{ session.rate_down_kbps }} / {{ session.rate_up_kbps }} kbps
+        {% else %}Unshaped{% endif %}
+      </dd>
+      <dt>Device</dt><dd class="mono">{{ session.mac }}</dd>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="/disconnect" data-confirm="Stop your session now?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-block btn-ghost" type="submit">Stop my session</button>
+    </form>
+    <p class="hint" style="margin-top:10px;text-align:center">
+      Time keeps running either way. Need more time? Insert a coin at the kiosk.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body row between">
+    <span class="muted" style="font-size:.84rem">Voucher used up?</span>
+    <a class="btn btn-sm" href="/">Redeem a new code</a>
+  </div>
+</div>
+{% endblock %}

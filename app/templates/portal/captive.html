@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3b2e">
+<meta name="robots" content="noindex">
+<title>{{ biz.business_name }} &middot; WiFi portal</title>
+<script>try{if(localStorage.getItem("bagsik.tos.v1")==="1"){document.documentElement.className+=" tos-ok";}}catch(e){}</script>
+<style>
+  :root{
+    --ink:#0a1f19;
+    --muted:#5b756c;
+    --bg:#eef4f1;
+    --card:#ffffff;
+    --line:#dbe6e1;
+    --brand:#0b6b4a;
+    --brand-deep:#0a3f2d;
+    --warn:#a25a06;
+    --danger:#8d2418;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    padding:14px 14px calc(14px + env(safe-area-inset-bottom));
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .shell{max-width:520px;margin:0 auto}
+
+  /* header */
+  .top{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:16px;
+    border-radius:22px;
+    color:#fff;
+    background:linear-gradient(135deg,#0b3b2e 0%,#0e6b4b 100%);
+    box-shadow:0 18px 40px -28px rgba(10,63,45,.9);
+  }
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .mark{
+    width:40px;height:40px;flex:0 0 40px;border-radius:13px;
+    display:grid;place-items:center;
+    background:rgba(255,255,255,.16);
+    font-weight:800;font-size:14px;letter-spacing:.04em;
+  }
+  .brand-copy{display:flex;flex-direction:column;min-width:0}
+  .brand-copy strong{font-size:15px;letter-spacing:.04em;line-height:1.2}
+  .brand-copy small{font-size:11px;opacity:.75;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{
+    flex:0 0 auto;padding:6px 11px;border-radius:999px;
+    font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    background:rgba(255,255,255,.16);color:#fff;
+  }
+  .pill[data-tone="ok"]{background:#d7f7e6;color:#05503a}
+  .pill[data-tone="warn"]{background:#fdecc8;color:#7a4103}
+
+  /* clock */
+  .clock-card{
+    margin-top:12px;padding:20px 16px 18px;
+    background:var(--card);border:1px solid var(--line);border-radius:22px;
+    text-align:center;
+  }
+  .eyebrow{margin:0;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .clock{
+    margin:6px 0 2px;
+    font-size:clamp(42px,15vw,64px);line-height:1.05;font-weight:700;
+    letter-spacing:.01em;font-variant-numeric:tabular-nums;color:var(--brand-deep);
+  }
+  .clock.is-paused{color:var(--warn)}
+  .clock.is-over{color:var(--danger)}
+  .clock-sub{margin:4px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+
+  /* flash */
+  .flash{margin-top:12px;padding:11px 13px;border-radius:14px;font-size:13px;line-height:1.45;border:1px solid}
+  .flash-ok{background:#e7f8ef;border-color:#b9e8cf;color:#0a5137}
+  .flash-err{background:#fdeceb;border-color:#f6c9c4;color:var(--danger)}
+
+  /* actions */
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .act{display:none}
+  .act.wide{grid-column:1 / -1}
+  body[data-state] .act[data-when="any"],
+  body[data-state="idle"] .act[data-when="idle"],
+  body[data-state="active"] .act[data-when="active"],
+  body[data-state="active"] .act[data-when="live"],
+  body[data-state="paused"] .act[data-when="paused"],
+  body[data-state="paused"] .act[data-when="live"]{display:block}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;min-height:50px;padding:0 16px;
+    border:1px solid transparent;border-radius:15px;
+    font:inherit;font-size:15px;font-weight:600;line-height:1.2;
+    text-align:center;text-decoration:none;cursor:pointer;
+    transition:transform .06s ease,box-shadow .15s ease,opacity .15s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.55;cursor:progress}
+  .btn-primary{
+    color:#fff;background:linear-gradient(135deg,#0f7a53,#0b5b3e);
+    box-shadow:0 12px 22px -14px rgba(11,107,74,.95);
+  }
+  .btn-quiet{background:#fff;border-color:var(--line);color:var(--ink)}
+  .btn-warn{background:#fff7ea;border-color:#f0d9b5;color:#8a4a05}
+  .btn-go{color:#fff;background:#0f7a53}
+  .btn-stop{background:#fff8f7;border-color:#f0cfcb;color:var(--danger);min-height:44px;font-size:13.5px}
+  .pulse{animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(15,122,83,.35)}50%{box-shadow:0 0 0 10px rgba(15,122,83,0)}}
+
+  /* cards */
+  .card{margin-top:12px;padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+  .card h2{margin:0 0 4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .hint{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .field-row{display:flex;gap:8px}
+  .field-row input{
+    flex:1 1 auto;min-width:0;min-height:48px;padding:0 13px;
+    border:1px solid var(--line);border-radius:13px;background:#fbfdfc;
+    font:inherit;font-size:16px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);
+  }
+  .field-row input::placeholder{letter-spacing:0;text-transform:none;color:#9aaea6}
+  .field-row input:focus{outline:2px solid rgba(15,122,83,.35);outline-offset:1px;border-color:#9fc9b6}
+  .field-row .btn{flex:0 0 auto;width:auto;padding:0 20px}
+
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px;margin:8px 0 0}
+  .facts div{min-width:0}
+  .facts dt{margin:0;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .facts dd{margin:3px 0 0;font-size:14px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+
+  .note{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin-top:12px;padding:11px 14px;
+    background:#fff;border:1px dashed #c3d6cd;border-radius:14px;
+    font-size:12.5px;color:var(--muted);
+  }
+  .note strong{color:var(--ink)}
+  .note a{color:var(--brand);font-weight:600;text-decoration:none}
+
+  /* coin slot */
+  .coin{
+    margin-top:12px;padding:16px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  }
+  .coin-head{display:flex;align-items:center;gap:9px}
+  .coin-dot{
+    width:10px;height:10px;flex:0 0 10px;border-radius:50%;
+    background:#c3d6cd;transition:background .2s ease,box-shadow .2s ease;
+  }
+  .coin-dot[data-tone="live"]{
+    background:#0f7a53;box-shadow:0 0 0 4px rgba(15,122,83,.16);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  .coin-dot[data-tone="wait"]{background:#d08a1a;box-shadow:0 0 0 4px rgba(208,138,26,.18)}
+  .coin-dot[data-tone="done"]{background:#0f7a53}
+  .coin-title{margin:0;font-size:15px;font-weight:700;line-height:1.35}
+  .coin-timer{
+    margin-left:auto;font-size:12px;font-weight:700;color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .coin-sub{margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .coin-track{height:6px;margin-top:12px;border-radius:999px;background:#e7efeb;overflow:hidden}
+  .coin-track span{
+    display:block;height:100%;width:0;border-radius:999px;
+    background:linear-gradient(90deg,#0f7a53,#39a877);
+    transition:width .3s ease;
+  }
+  .coin-foot{display:flex;gap:8px;margin-top:12px}
+  .coin-foot form{flex:1 1 auto;margin:0}
+  .coin-foot .btn{min-height:44px;font-size:13.5px}
+
+  /* footer */
+  .foot{margin-top:20px;text-align:center;font-size:11.5px;line-height:1.7;color:#7b918a}
+  .foot p{margin:2px 0}
+  .foot .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px}
+  .link{
+    padding:0;border:0;background:none;
+    font:inherit;color:var(--brand);text-decoration:underline;cursor:pointer;
+  }
+
+  /* overlays */
+  #tos{display:grid}
+  .tos-ok #tos{display:none}
+  .overlay{
+    position:fixed;inset:0;z-index:60;
+    padding:16px;
+    background:rgba(6,20,16,.55);
+    -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+    overflow:auto;
+  }
+  .overlay[hidden]{display:none}
+  .sheet{
+    max-width:440px;width:100%;margin:auto;padding:18px;
+    background:#fff;border-radius:20px;
+    display:flex;flex-direction:column;max-height:88vh;
+  }
+  .sheet h2{margin:0 0 10px;font-size:16px}
+  .sheet-body{overflow:auto;font-size:13.5px;line-height:1.6;color:#23403a}
+  .sheet-body p{margin:0 0 10px}
+  .sheet-foot{display:flex;gap:8px;margin-top:14px}
+  .sheet-foot .btn{min-height:46px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:7px 6px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  tbody tr:last-child td{border-bottom:0}
+
+  @media (max-width:359px){
+    .actions{grid-template-columns:1fr}
+    .actions > *,.act[data-wide]{grid-column:auto}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important}
+  }
+</style>
+</head>
+
+{% set rs = session.remaining_seconds if session else 0 %}
+{% set hh = rs // 3600 %}{% set mm = (rs % 3600) // 60 %}{% set ss = rs % 60 %}
+<body data-state="{{ session.status if session else 'idle' }}"
+      data-remaining="{{ rs }}"
+      data-balance="{{ balance_centavos }}"
+      data-coin-phase="{{ coin_flow.phase }}"
+      data-coin-left="{{ coin_flow.txn.seconds_left }}"
+      data-coin-ready="{{ '1' if coin_flow.coin_ready else '0' }}">
+<noscript><style>#tos{display:none}</style></noscript>
+
+<div class="shell">
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">BP</span>
+      <span class="brand-copy">
+        <strong>{{ biz.business_name }}</strong>
+        <small>{{ biz.portal_headline }}</small>
+      </span>
+    </div>
+    <span class="pill" data-status
+          data-tone="{% if session and session.status == 'paused' %}warn{% elif session %}ok{% else %}off{% endif %}">
+      {%- if session and session.status == 'paused' -%}Paused
+      {%- elif session -%}Connected
+      {%- else -%}Disconnected{%- endif -%}
+    </span>
+  </header>
+
+  <section class="clock-card">
+    <p class="eyebrow" data-clock-label>{% if session and session.status == 'paused' %}Time paused{% else %}Remaining time{% endif %}</p>
+    <p class="clock" data-clock>{{ (hh ~ ':') if hh else '' }}{{ "%d:%02d" | format(mm, ss) }}</p>
+    <p class="clock-sub">
+      {%- if session -%}
+        {{ session.plan }} &middot; ends {{ session.ends_at | dt_time }}
+      {%- else -%}
+        {{ biz.portal_subtext }}
+      {%- endif -%}
+    </p>
+  </section>
+
+  {% if msg %}<div class="flash flash-ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="flash flash-err">{{ err }}</div>{% endif %}
+
+  <!-- Coin slot: the one hardware window every device shares. -->
+  <section class="coin" data-coin-panel aria-live="polite">
+    <div class="coin-head">
+      <span class="coin-dot" data-coin-dot></span>
+      <p class="coin-title" data-coin-title>Tap to insert coin</p>
+      <span class="coin-timer" data-coin-timer></span>
+    </div>
+    <p class="coin-sub" data-coin-sub>Drop &#8369;1, &#8369;5, &#8369;10 or &#8369;20 coins. Your time is added automatically.</p>
+    <div class="coin-track" data-coin-track hidden><span data-coin-fill></span></div>
+    <div class="coin-foot" data-coin-foot hidden>
+      <form method="post" action="/coin/cancel" data-busy="Closing&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="to" value="/">
+        <button class="btn btn-quiet" type="submit" data-coin-cancel>Cancel &amp; release the slot</button>
+      </form>
+    </div>
+  </section>
+
+  <div class="actions">
+    <div class="act wide" data-when="any" data-coin-cta>
+      <form method="post" action="/coin/arm" data-busy="Opening the slot&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="to" value="/">
+        <button class="btn btn-primary pulse" type="submit" data-coin-button {% if not coin_flow.coin_ready %}disabled{% endif %}>
+          <span data-coin-label>{% if session %}Insert Additional Coins{% else %}Insert Coin{% endif %}</span>
+        </button>
+      </form>
+    </div>
+
+    <div class="act" data-when="active">
+      <form method="post" action="/pause" data-busy="Pausing&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-warn" type="submit">Pause Time</button>
+      </form>
+    </div>
+
+    <div class="act" data-when="paused">
+      <form method="post" action="/resume" data-busy="Resuming&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-go pulse" type="submit">Resume Time</button>
+      </form>
+    </div>
+
+    {% if show_rates %}
+    <div class="act" data-when="any">
+      <button class="btn btn-quiet" type="button" data-open="rates">View Rates</button>
+    </div>
+    {% endif %}
+
+    {% if kiosk_voucher_enabled %}
+    <div class="act" data-when="idle">
+      <a class="btn btn-quiet" href="/kiosk">Buy Voucher</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="note" data-credit-wrap {% if balance_centavos <= 0 %}hidden{% endif %}>
+    <span><strong data-credit>{{ balance_centavos | money }}</strong> leftover credit</span>
+    <a href="/kiosk">Use it now</a>
+  </div>
+
+  <section class="card">
+    <h2>Redeem a voucher code</h2>
+    <p class="hint">Type the code printed on your ticket, or the code sent during a promo.</p>
+    <form method="post" action="/redeem" data-busy="Checking&hellip;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field-row">
+        <label for="code" style="position:absolute;left:-9999px">Voucher code</label>
+        <input id="code" name="code" type="text" inputmode="text" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" maxlength="32" required
+               placeholder="Enter voucher here...">
+        <button class="btn btn-primary" type="submit">Submit</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card act" data-when="live" style="display:none">
+    <h2>Your session</h2>
+    <dl class="facts">
+      <div>
+        <dt>Plan</dt>
+        <dd data-fact="plan">{{ session.plan if session else '-' }}</dd>
+      </div>
+      <div>
+        <dt>Data used</dt>
+        <dd data-fact="data">
+          {%- if session and session.data_cap_bytes -%}
+            {{ (session.bytes_used / 1048576) | round(1) }} of {{ (session.data_cap_bytes / 1048576) | round(0) | int }} MB
+          {%- elif session -%}
+            {{ (session.bytes_used / 1048576) | round(1) }} MB
+          {%- else -%}-{%- endif -%}
+        </dd>
+      </div>
+      <div>
+        <dt>Speed</dt>
+        <dd data-fact="speed">
+          {%- if session and session.rate_down_kbps -%}
+            {{ (session.rate_down_kbps / 1000) | round(1) }} Mbps
+          {%- else -%}-{%- endif -%}
+        </dd>
+      </div>
+      <div>
+        <dt>Ends at</dt>
+        <dd data-fact="ends">{{ session.ends_at | dt_time if session else '-' }}</dd>
+      </div>
+    </dl>
+  </section>
+
+  <div class="actions">
+    <div class="act wide" data-when="live">
+      <form method="post" action="/disconnect"
+            data-confirm="Stop now? Any time left on this session is lost."
+            data-busy="Stopping&hellip;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-stop" type="submit">Stop my session</button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <p>{{ biz.print_footer }}</p>
+    <p>{{ biz.portal_contact }}</p>
+    <p>
+      <button class="link" type="button" data-open="tos">Terms of Service</button>
+      &middot; <span class="mono">{{ mac or 'unknown device' }}</span>
+      &middot; <span class="mono">{{ settings.app_name }} v{{ app_version }}</span>
+    </p>
+  </footer>
+</div>
+
+<!-- Terms of service gate: shown until the device agrees once. -->
+<div id="tos" class="overlay" role="dialog" aria-modal="true" aria-labelledby="tos-title">
+  <div class="sheet">
+    <h2 id="tos-title">Terms of Service</h2>
+    <div class="sheet-body">
+      <p>{{ biz.business_name }} lends you internet access for the time you paid for. By tapping I Agree you accept these house rules.</p>
+      <p>No illegal activity, no spamming, no attacking the network or other customers. Keep one device per session. Your MAC address is recorded so coins and time can be credited to you.</p>
+      <p>Time keeps running while you are online; tap Pause Time before you leave so the countdown stops. Credit and time are not refundable once used, and the operator may cut a session for abuse.</p>
+      <p>To connect: tap Insert Coin and drop your coins, or redeem a voucher code on this page. No plan to choose - the operator's coin rates decide how much time each coin buys.</p>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-primary" type="button" data-tos-agree>I Agree</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rates board -->
+<div id="rates" class="overlay" role="dialog" aria-modal="true" aria-labelledby="rates-title" hidden>
+  <div class="sheet">
+    <h2 id="rates-title">Coin rates</h2>
+    <div class="sheet-body">
+      <table>
+        <thead>
+          <tr><th>Coin bundle</th><th>Price</th><th>Time</th><th>Data</th><th>Speed</th></tr>
+        </thead>
+        <tbody>
+          {% for plan in plans %}
+          <tr>
+            <td>{{ plan.name }}</td>
+            <td>{{ plan.price_centavos | money }}</td>
+            <td>{{ plan.duration_minutes | minutes }}</td>
+            <td>{{ (plan.data_cap_mb ~ ' MB') if plan.data_cap_mb else 'No cap' }}</td>
+            <td>{% if plan.rate_down_kbps %}{{ (plan.rate_down_kbps / 1000) | round(1) }} Mbps{% else %}Shared{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No coin rates posted yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p style="margin-top:12px">Coins are converted automatically the moment the slot goes quiet, at the best rate they fit. Anything below the smallest bundle waits as credit on this device.</p>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-quiet" type="button" data-close>Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var body = document.body;
+  var html = document.documentElement;
+  var clockEl = document.querySelector("[data-clock]");
+  var labelEl = document.querySelector("[data-clock-label]");
+  var statusEl = document.querySelector("[data-status]");
+  var creditEls = document.querySelectorAll("[data-credit], [data-credit-inline]");
+  var creditWrap = document.querySelector("[data-credit-wrap]");
+  var coinLabels = document.querySelectorAll("[data-coin-label]");
+  var facts = {
+    plan: document.querySelector("[data-fact='plan']"),
+    data: document.querySelector("[data-fact='data']"),
+    speed: document.querySelector("[data-fact='speed']"),
+    ends: document.querySelector("[data-fact='ends']")
+  };
+
+  var coinEls = {
+    dot: document.querySelector("[data-coin-dot]"),
+    title: document.querySelector("[data-coin-title]"),
+    sub: document.querySelector("[data-coin-sub]"),
+    timer: document.querySelector("[data-coin-timer]"),
+    track: document.querySelector("[data-coin-track]"),
+    fill: document.querySelector("[data-coin-fill]"),
+    foot: document.querySelector("[data-coin-foot]"),
+    cta: document.querySelector("[data-coin-cta]"),
+    button: document.querySelector("[data-coin-button]")
+  };
+
+  var state = {
+    status: body.getAttribute("data-state") || "idle",
+    remaining: parseInt(body.getAttribute("data-remaining"), 10) || 0,
+    balance: parseInt(body.getAttribute("data-balance"), 10) || 0
+  };
+
+  // The coin slot is one physical device: the server tells this page whether it
+  // is free, listening for us, finishing our count or held by someone else.
+  var coin = {
+    phase: body.getAttribute("data-coin-phase") || "idle",
+    left: parseInt(body.getAttribute("data-coin-left"), 10) || 0,
+    pulses: 0,
+    minutes: 0,
+    message: "",
+    ready: body.getAttribute("data-coin-ready") !== "0"
+  };
+
+  function each(list, fn) {
+    Array.prototype.forEach.call(list, fn);
+  }
+
+  function pad2(value) {
+    return (value < 10 ? "0" : "") + value;
+  }
+
+  function clock(seconds) {
+    seconds = Math.max(0, Math.floor(seconds));
+    var hours = Math.floor(seconds / 3600);
+    var minutes = Math.floor((seconds % 3600) / 60);
+    var secs = seconds % 60;
+    return (hours > 0 ? hours + ":" + pad2(minutes) : String(minutes)) + ":" + pad2(secs);
+  }
+
+  function money(centavos) {
+    return "\u20b1" + (Math.max(0, centavos) / 100).toFixed(2);
+  }
+
+  function bytes(value) {
+    value = Math.max(0, value || 0);
+    var units = ["B", "KB", "MB", "GB", "TB"];
+    var index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+      value = value / 1024;
+      index += 1;
+    }
+    return (index === 0 ? Math.round(value) : value.toFixed(1)) + " " + units[index];
+  }
+
+  function clockTime(iso) {
+    var when = new Date(iso);
+    if (isNaN(when.getTime())) return "-";
+    return pad2(when.getHours()) + ":" + pad2(when.getMinutes());
+  }
+
+  function paint() {
+    body.setAttribute("data-state", state.status);
+
+    clockEl.classList.remove("is-paused", "is-over");
+    if (state.status === "idle") {
+      clockEl.textContent = "--:--";
+      labelEl.textContent = "Remaining time";
+    } else if (state.status === "paused") {
+      clockEl.textContent = clock(state.remaining);
+      clockEl.classList.add("is-paused");
+      labelEl.textContent = "Time paused - tap Resume Time";
+    } else {
+      clockEl.textContent = clock(state.remaining);
+      if (state.remaining > 0) {
+        labelEl.textContent = "Remaining time";
+      } else {
+        clockEl.classList.add("is-over");
+        labelEl.textContent = "Time is up - insert a coin";
+      }
+    }
+
+    if (state.status === "active") {
+      statusEl.textContent = "Connected";
+      statusEl.setAttribute("data-tone", "ok");
+    } else if (state.status === "paused") {
+      statusEl.textContent = "Paused";
+      statusEl.setAttribute("data-tone", "warn");
+    } else {
+      statusEl.textContent = "Disconnected";
+      statusEl.setAttribute("data-tone", "off");
+    }
+
+    each(coinLabels, function (node) {
+      node.textContent = state.status === "idle" ? "Insert Coin" : "Insert Additional Coins";
+    });
+    each(creditEls, function (node) {
+      node.textContent = money(state.balance);
+    });
+    if (creditWrap) {
+      creditWrap.hidden = state.balance <= 0;
+    }
+  }
+
+  function paintFacts(session) {
+    if (!session) return;
+    if (facts.plan) facts.plan.textContent = session.plan || "-";
+    if (facts.data) {
+      facts.data.textContent = session.data_cap_bytes
+        ? bytes(session.bytes_used) + " of " + bytes(session.data_cap_bytes)
+        : bytes(session.bytes_used);
+    }
+    if (facts.speed) {
+      facts.speed.textContent = session.rate_down_kbps
+        ? (session.rate_down_kbps / 1000).toFixed(1) + " Mbps"
+        : "Shared";
+    }
+    if (facts.ends) facts.ends.textContent = clockTime(session.ends_at);
+  }
+
+  function apply(data) {
+    if (!data) return;
+    state.balance = data.balance_centavos || 0;
+    var session = data.session;
+    if (!session) {
+      state.status = "idle";
+      state.remaining = 0;
+    } else {
+      state.status = session.status === "paused" ? "paused" : "active";
+      state.remaining = session.remaining_seconds || 0;
+      paintFacts(session);
+    }
+    paint();
+  }
+
+  function plural(value, word) {
+    value = Math.max(0, value | 0);
+    return value + " " + word + (value === 1 ? "" : "s");
+  }
+
+  // Coin panel: one line of truth per phase, matching the server's state.
+  function paintCoin() {
+    if (!coinEls.title) return;
+    var phase = coin.phase;
+    var armed = phase === "listening" || phase === "counting" || phase === "processing";
+    var title = "Tap to insert coin";
+    var sub = "Drop \u20b11, \u20b15, \u20b110 or \u20b120. Time is added automatically - there is no plan to choose.";
+    var tone = "off";
+    var timer = "";
+
+    if (phase === "listening") {
+      title = "Listening for coins\u2026";
+      sub = "Drop your coins now. The slot closes by itself, so nothing is left half-paid.";
+      tone = "live";
+      timer = coin.left + "s";
+    } else if (phase === "counting") {
+      title = "Counting coins\u2026 " + plural(coin.pulses, "pulse");
+      sub = coin.minutes > 0
+        ? "\u2248 " + plural(coin.minutes, "minute") + " queued. Keep inserting, or wait for the slot to close."
+        : "Keep inserting until the slot goes quiet; the rate applies to the whole burst.";
+      tone = "live";
+      timer = coin.left + "s";
+    } else if (phase === "processing") {
+      title = "Processing\u2026";
+      sub = "Turning your coins into time. This takes a couple of seconds.";
+      tone = "wait";
+    } else if (phase === "busy") {
+      title = "Coin slot busy";
+      sub = coin.message || "Another customer is currently inserting coins. Please wait.";
+      tone = "wait";
+      timer = coin.left > 0 ? coin.left + "s" : "";
+    } else if (phase === "expired") {
+      title = "No coins detected";
+      sub = "The slot closed before a coin arrived. Tap Insert Coin to try again.";
+    } else if (phase === "granted") {
+      title = "Time added: " + plural(coin.minutes, "minute");
+      sub = plural(coin.pulses, "coin pulse") + " credited to this device. Your countdown is running.";
+      tone = "done";
+    }
+
+    if (!coin.ready) {
+      title = "Coin slot offline";
+      sub = "Please call the attendant. Voucher codes still work below.";
+      tone = "wait";
+    }
+
+    coinEls.title.textContent = title;
+    coinEls.sub.textContent = sub;
+    coinEls.dot.setAttribute("data-tone", tone);
+    coinEls.timer.textContent = timer;
+    if (coinEls.track) coinEls.track.hidden = phase === "idle" || phase === "expired";
+    if (coinEls.fill) coinEls.fill.style.width = (phase === "idle" || phase === "expired") ? "0" : "100%";
+    if (coinEls.foot) coinEls.foot.hidden = !(phase === "listening" || phase === "counting");
+    if (coinEls.cta) coinEls.cta.hidden = armed;
+    if (coinEls.button) coinEls.button.disabled = !coin.ready;
+  }
+
+  function applyCoin(data) {
+    if (!data) return;
+    var txn = data.txn || {};
+    var granted = data.granted;
+    var phase = data.phase || "idle";
+    if (phase === "idle" && granted) phase = "granted";
+
+    coin.phase = phase;
+    coin.left = txn.seconds_left || 0;
+    coin.pulses = txn.pulses || 0;
+    coin.message = data.busy_message || "";
+    coin.ready = data.coin_ready !== false;
+    if (phase === "granted") {
+      coin.minutes = granted ? granted.minutes : 0;
+      coin.pulses = granted ? granted.pulses : 0;
+    } else {
+      coin.minutes = (data.quote && data.quote.minutes) || 0;
+    }
+    paintCoin();
+  }
+
+  var polling = false;
+
+  function refresh() {
+    if (!window.fetch || polling) return;
+    polling = true;
+    fetch("/coin/state", { cache: "no-store", credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        apply(data);
+        applyCoin(data);
+      })
+      .catch(function () {})
+      .then(function () {
+        polling = false;
+        scheduleRefresh();
+      });
+  }
+
+  // Fast polling while the slot is ours (or busy), slow while idle.
+  function scheduleRefresh() {
+    var live = coin.phase === "listening" || coin.phase === "counting"
+      || coin.phase === "processing" || coin.phase === "busy";
+    window.setTimeout(refresh, live ? 1000 : 4000);
+  }
+
+  // Countdown runs on the client, the server is re-read every few seconds so a
+  // pause, an expiry or a coin credit from another page shows up by itself.
+  window.setInterval(function () {
+    if (coin.phase === "listening" || coin.phase === "counting" || coin.phase === "busy") {
+      if (coin.left > 0) {
+        coin.left -= 1;
+        paintCoin();
+      }
+    }
+    if (state.status !== "active") return;
+    if (state.remaining > 0) {
+      state.remaining -= 1;
+      paint();
+    }
+    if (state.remaining <= 0) refresh();
+  }, 1000);
+  if (window.fetch) refresh(); else paintCoin();
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) refresh();
+  });
+
+  // Overlays: rates board + terms gate.
+  function openOverlay(id) {
+    var el = document.getElementById(id);
+    if (el) el.hidden = false;
+  }
+
+  each(document.querySelectorAll(".overlay"), function (el) {
+    el.addEventListener("click", function (event) {
+      if (event.target === el && el.id !== "tos") el.hidden = true;
+    });
+  });
+
+  document.addEventListener("click", function (event) {
+    var node = event.target;
+    while (node && node !== document) {
+      if (node.getAttribute) {
+        if (node.hasAttribute("data-open")) {
+          openOverlay(node.getAttribute("data-open"));
+          return;
+        }
+        if (node.hasAttribute("data-close")) {
+          var sheet = node;
+          while (sheet && !sheet.classList.contains("overlay")) sheet = sheet.parentNode;
+          if (sheet) sheet.hidden = true;
+          return;
+        }
+        if (node.hasAttribute("data-tos-agree")) {
+          html.className += " tos-ok";
+          try { localStorage.setItem("bagsik.tos.v1", "1"); } catch (e) {}
+          return;
+        }
+      }
+      node = node.parentNode;
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    each(document.querySelectorAll(".overlay"), function (el) {
+      if (el.id !== "tos") el.hidden = true;
+    });
+  });
+
+  // Every form on this page is a plain POST: lock the button so a slow link
+  // cannot double-charge or double-pause.
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!form) return;
+    var question = form.getAttribute("data-confirm");
+    if (question && !window.confirm(question)) {
+      event.preventDefault();
+      return;
+    }
+    var button = form.querySelector("button[type='submit'], button:not([type])");
+    if (!button) return;
+    var busy = form.getAttribute("data-busy") || "Please wait\u2026";
+    window.setTimeout(function () {
+      button.disabled = true;
+      button.textContent = busy;
+    }, 0);
+  });
+
+  paint();
+  paintCoin();
+})();
+</script>
+</body>
+</html>

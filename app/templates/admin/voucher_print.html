@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Print batch {{ batch_id }} - {{ business }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="content">
+    <div class="no-print row between" style="margin-bottom:14px">
+      <div>
+        <h1 style="margin:0">Batch #{{ batch_id }}</h1>
+        <p class="muted" style="margin:2px 0 0">
+          {{ batch.label if batch else 'Vouchers' }}
+          {% if batch %} &middot; {{ batch.plan_name }} &middot; {{ codes | length }} tickets{% endif %}
+        </p>
+      </div>
+      <div class="row">
+        <a class="btn btn-ghost" href="/admin/vouchers">Back</a>
+        <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
+      </div>
+    </div>
+
+    <div class="print-sheet">
+      <div class="print-head">
+        <div>
+          <h1>{{ business }}</h1>
+          <div style="font-size:.78rem;color:#444">
+            {% if batch %}{{ batch.plan_name }} &middot; {{ batch.duration_minutes | minutes }}
+            {% if batch.data_cap_mb %} &middot; {{ batch.data_cap_mb }} MB{% endif %}
+            &middot; {{ codes[0].price_centavos | money if codes else '' }}{% endif %}
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:#555;text-align:right">
+          Batch #{{ batch_id }}
+          {% if batch %}<br>{{ batch.created_at | dt_short }}{% endif %}
+        </div>
+      </div>
+
+      <div class="tickets">
+        {% for item in codes %}
+        <div class="ticket">
+          <div class="t-brand">{{ business }}</div>
+          <div class="t-code">{{ item.code }}</div>
+          <div class="t-meta">
+            {{ item.plan_name or 'Plan' }}<br>
+            {{ item.duration_minutes | minutes }}
+            {% if item.data_cap_mb %} &middot; {{ item.data_cap_mb }} MB{% endif %}<br>
+            only {{ item.price_centavos | money }}
+          </div>
+          {% if item.note %}<div class="t-meta">{{ item.note }}</div>{% endif %}
+        </div>
+        {% else %}
+        <p>This batch has no vouchers.</p>
+        {% endfor %}
+      </div>
+
+      <div class="print-foot">{{ footer }}</div>
+    </div>
+  </div>
+</body>
+</html>
